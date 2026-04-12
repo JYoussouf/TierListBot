@@ -1,0 +1,1 @@
+"""TierListBot Discord bot package."""
