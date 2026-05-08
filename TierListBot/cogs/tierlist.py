@@ -91,6 +91,28 @@ class DeleteConfirmView(discord.ui.View):
         await interaction.response.edit_message(content="Cancelled.", view=None)
 
 
+class HistoryDeleteView(discord.ui.View):
+    def __init__(self, cog: "TierListCog", list_id: str, name: str):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.list_id = list_id
+        self.name = name
+
+    @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        try:
+            self.cog.service.delete_list(self.list_id, interaction.user.id)
+        except NotFoundError:
+            pass
+        await interaction.response.edit_message(
+            content=f"**{self.name}** deleted.", view=None
+        )
+
+    @discord.ui.button(label="Keep", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(content="Kept.", view=None)
+
+
 class HistorySelectView(discord.ui.View):
     def __init__(self, cog: "TierListCog", finished_lists):
         super().__init__(timeout=120)
@@ -108,7 +130,7 @@ class HistorySelectView(discord.ui.View):
             )
 
         select = discord.ui.Select(
-            placeholder="Pick a finished tier list to re-render…",
+            placeholder="Pick a finished tier list…",
             options=options,
         )
         select.callback = self._on_select
@@ -116,19 +138,22 @@ class HistorySelectView(discord.ui.View):
 
     async def _on_select(self, interaction: discord.Interaction) -> None:
         list_id = interaction.data["values"][0]  # type: ignore[index]
-        await interaction.response.defer(ephemeral=True)
         try:
             list_obj    = self.cog.service.get_list(list_id)
             items       = self.cog.service.list_items(list_id)
             tier_labels = self.cog.service.get_tiers_ordered(list_id)
         except Exception as exc:
-            await interaction.followup.send(str(exc), ephemeral=True)
+            await interaction.response.send_message(str(exc), ephemeral=True)
             return
         output_path = self.cog.renderer.render(list_obj, items, tier_labels)
         finished_str = list_obj.finished_at.strftime("%Y-%m-%d") if list_obj.finished_at else "?"
-        await interaction.followup.send(
+        await interaction.response.send_message(
             f"**{list_obj.name}** (finished {finished_str})",
             file=discord.File(output_path, filename=f"{list_obj.id}.png"),
+        )
+        await interaction.followup.send(
+            f"Delete **{list_obj.name}** from history?",
+            view=HistoryDeleteView(self.cog, list_id, list_obj.name),
             ephemeral=True,
         )
 
