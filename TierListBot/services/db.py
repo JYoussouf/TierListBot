@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS tier_lists (
     name TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
+    message_id TEXT,
     FOREIGN KEY(guild_id) REFERENCES guilds(guild_id)
 );
 
@@ -76,6 +77,30 @@ class Database:
     def init_schema(self) -> None:
         with self._lock:
             self._conn.executescript(SCHEMA_SQL)
+            self._conn.commit()
+            try:
+                self._conn.execute("ALTER TABLE tier_lists ADD COLUMN message_id TEXT")
+                self._conn.commit()
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
+    def get_active_list_by_channel(self, channel_id: int) -> sqlite3.Row | None:
+        with self._lock:
+            return self._conn.execute(
+                """
+                SELECT * FROM tier_lists
+                WHERE channel_id = ? AND message_id IS NOT NULL
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                (channel_id,),
+            ).fetchone()
+
+    def update_message_id(self, list_id: str, message_id: str) -> None:
+        with self._lock:
+            self._conn.execute(
+                "UPDATE tier_lists SET message_id = ? WHERE id = ?",
+                (message_id, list_id),
+            )
             self._conn.commit()
 
     @contextmanager

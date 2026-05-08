@@ -8,7 +8,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from TierListBot.models import DEFAULT_TIERS, Tier
 from TierListBot.services.image_store import ImageStore, ImageValidationError
 from TierListBot.services.tierlist_service import LimitError, NotFoundError, TierListService
 
@@ -106,7 +105,7 @@ class QuickMoveView(discord.ui.View):
         self.list_id = list_id
         self.item_id = item_id
 
-    async def _move(self, interaction: discord.Interaction, tier: Tier) -> None:
+    async def _move(self, interaction: discord.Interaction, tier: str) -> None:
         if not await self.cog._can_edit(interaction, self.list_id):
             await interaction.response.send_message(
                 "Only the list creator or a server admin can edit this list.",
@@ -121,28 +120,28 @@ class QuickMoveView(discord.ui.View):
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
         await interaction.response.send_message(
-            f"Moved `{item.id}` to tier **{tier.value}**.", ephemeral=True
+            f"Moved `{item.id}` to tier **{tier}**.", ephemeral=True
         )
 
     @discord.ui.button(label="S", style=discord.ButtonStyle.danger)
     async def s_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self._move(interaction, Tier.S)
+        await self._move(interaction, "S")
 
     @discord.ui.button(label="A", style=discord.ButtonStyle.secondary)
     async def a_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self._move(interaction, Tier.A)
+        await self._move(interaction, "A")
 
     @discord.ui.button(label="B", style=discord.ButtonStyle.secondary)
     async def b_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self._move(interaction, Tier.B)
+        await self._move(interaction, "B")
 
     @discord.ui.button(label="C", style=discord.ButtonStyle.secondary)
     async def c_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self._move(interaction, Tier.C)
+        await self._move(interaction, "C")
 
     @discord.ui.button(label="D", style=discord.ButtonStyle.secondary)
     async def d_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self._move(interaction, Tier.D)
+        await self._move(interaction, "D")
 
 
 class TierListCog(commands.Cog):
@@ -176,11 +175,12 @@ class TierListCog(commands.Cog):
         try:
             list_obj = self.service.get_list(list_id)
             items = self.service.list_items(list_id)
+            tier_labels = self.service.get_tiers_ordered(list_id)
         except NotFoundError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
 
-        output_path = self.renderer.render(list_obj, items)
+        output_path = self.renderer.render(list_obj, items, tier_labels)
         file = discord.File(output_path, filename=f"{list_obj.id}.png")
         if interaction.response.is_done():
             await interaction.followup.send(file=file, ephemeral=ephemeral)
@@ -213,8 +213,20 @@ class TierListCog(commands.Cog):
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
 
-        await interaction.response.send_message(
-            f"Created tier list **{tier_list.name}** with ID `{tier_list.id}`."
+        await interaction.response.defer(ephemeral=True)
+
+        tier_labels = self.service.get_tiers_ordered(tier_list.id)
+        output_path = self.renderer.render(tier_list, [], tier_labels)
+        assert interaction.channel is not None
+        board_msg = await interaction.channel.send(
+            file=discord.File(output_path, filename=f"{tier_list.id}.png")
+        )
+        self.service.update_message_id(tier_list.id, str(board_msg.id))
+
+        await interaction.followup.send(
+            f"Created tier list **{tier_list.name}** (`{tier_list.id}`). "
+            f"Use `/s` `/a` `/b` `/c` `/d` to add items.",
+            ephemeral=True,
         )
 
     @tierlist.command(name="add", description="Add an image item to a tier list")
@@ -254,7 +266,7 @@ class TierListCog(commands.Cog):
                 list_id=list_id,
                 actor_id=interaction.user.id,
                 label=label,
-                tier=Tier.D,
+                tier="D",
                 image=stored,
                 original_filename=image.filename,
             )
@@ -291,13 +303,13 @@ class TierListCog(commands.Cog):
             return
 
         try:
-            item = self.service.move_item(list_id, item_id, interaction.user.id, Tier(tier))
+            item = self.service.move_item(list_id, item_id, interaction.user.id, tier)
         except NotFoundError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
 
         await interaction.response.send_message(
-            f"Moved item `{item.id}` to tier **{item.tier.value}**."
+            f"Moved item `{item.id}` to tier **{item.tier}**."
         )
 
     @tierlist.command(name="render", description="Render and post the tier board")
@@ -320,16 +332,22 @@ class TierListCog(commands.Cog):
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
 
+        try:
+            tier_labels = self.service.get_tiers_ordered(tier_list.id)
+        except NotFoundError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+
         lines = [f"**{tier_list.name}** (`{tier_list.id}`)"]
-        for tier in DEFAULT_TIERS:
-            tier_items = [i for i in items if i.tier == tier]
+        for label in tier_labels:
+            tier_items = [i for i in items if i.tier == label]
             if not tier_items:
-                lines.append(f"`{tier.value}`: (empty)")
+                lines.append(f"`{label}`: (empty)")
                 continue
             summary = ", ".join(
                 f"`{item.id}`{f' {item.label}' if item.label else ''}" for item in tier_items[:8]
             )
-            lines.append(f"`{tier.value}`: {summary}")
+            lines.append(f"`{label}`: {summary}")
 
         view = TierListManageView(self, list_id)
         await interaction.response.send_message("\n".join(lines), view=view)

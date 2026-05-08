@@ -25,6 +25,7 @@ class TierList:
     name: str
     created_at: datetime
     updated_at: datetime
+    message_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -32,7 +33,7 @@ class TierItem:
     id: str
     list_id: str
     label: str | None
-    tier: Tier
+    tier: str
     image_path: str
     created_by: int
     created_at: datetime

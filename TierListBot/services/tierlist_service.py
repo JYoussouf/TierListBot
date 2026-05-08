@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
-from TierListBot.models import DEFAULT_TIERS, Tier, TierItem, TierList
+from TierListBot.models import DEFAULT_TIERS, TierItem, TierList
 from TierListBot.services.db import Database
 from TierListBot.services.image_store import StoredImage
 
@@ -85,6 +85,7 @@ class TierListService:
             name=row["name"],
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
+            message_id=row["message_id"],
         )
 
     def list_items(self, list_id: str) -> list[TierItem]:
@@ -99,7 +100,7 @@ class TierListService:
                     id=row["id"],
                     list_id=row["list_id"],
                     label=row["label"],
-                    tier=Tier(row["tier"]),
+                    tier=row["tier"],
                     image_path=row["image_path"],
                     created_by=row["created_by"],
                     created_at=datetime.fromisoformat(row["created_at"]),
@@ -112,7 +113,7 @@ class TierListService:
         list_id: str,
         actor_id: int,
         label: str | None,
-        tier: Tier,
+        tier: str,
         image: StoredImage,
         original_filename: str | None,
     ) -> TierItem:
@@ -132,7 +133,7 @@ class TierListService:
                 INSERT INTO items(id, list_id, label, tier, image_path, created_by, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (item_id, list_id, label, tier.value, str(image.path), actor_id, now),
+                (item_id, list_id, label, tier, str(image.path), actor_id, now),
             )
             conn.execute(
                 """
@@ -157,7 +158,7 @@ class TierListService:
                 list_id,
                 actor_id,
                 "tierlist.item.add",
-                {"item_id": item_id, "tier": tier.value, "label": label},
+                {"item_id": item_id, "tier": tier, "label": label},
             )
 
         return self.get_item(item_id)
@@ -171,13 +172,13 @@ class TierListService:
             id=row["id"],
             list_id=row["list_id"],
             label=row["label"],
-            tier=Tier(row["tier"]),
+            tier=row["tier"],
             image_path=row["image_path"],
             created_by=row["created_by"],
             created_at=datetime.fromisoformat(row["created_at"]),
         )
 
-    def move_item(self, list_id: str, item_id: str, actor_id: int, tier: Tier) -> TierItem:
+    def move_item(self, list_id: str, item_id: str, actor_id: int, tier: str) -> TierItem:
         now = self.db.utc_now()
         list_obj = self.get_list(list_id)
         with self.db.tx() as conn:
@@ -186,7 +187,7 @@ class TierListService:
             ).fetchone()
             if not row:
                 raise NotFoundError("Item not found in this tier list.")
-            conn.execute("UPDATE items SET tier = ? WHERE id = ?", (tier.value, item_id))
+            conn.execute("UPDATE items SET tier = ? WHERE id = ?", (tier, item_id))
             conn.execute("UPDATE tier_lists SET updated_at = ? WHERE id = ?", (now, list_id))
             self._log(
                 conn,
@@ -194,7 +195,7 @@ class TierListService:
                 list_id,
                 actor_id,
                 "tierlist.item.move",
-                {"item_id": item_id, "tier": tier.value},
+                {"item_id": item_id, "tier": tier},
             )
         return self.get_item(item_id)
 
@@ -253,6 +254,54 @@ class TierListService:
                     path.unlink()
                 except OSError:
                     continue
+
+    def get_active_list(self, channel_id: int) -> TierList | None:
+        row = self.db.get_active_list_by_channel(channel_id)
+        if not row:
+            return None
+        return TierList(
+            id=row["id"],
+            guild_id=row["guild_id"],
+            channel_id=row["channel_id"],
+            owner_id=row["owner_id"],
+            name=row["name"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
+            message_id=row["message_id"],
+        )
+
+    def update_message_id(self, list_id: str, message_id: str) -> None:
+        self.db.update_message_id(list_id, message_id)
+
+    def get_tiers_ordered(self, list_id: str) -> list[str]:
+        with self.db.tx() as conn:
+            rows = conn.execute(
+                "SELECT tier_label FROM tiers WHERE list_id = ? ORDER BY position ASC",
+                (list_id,),
+            ).fetchall()
+        return [row["tier_label"] for row in rows]
+
+    def add_tier(self, list_id: str, actor_id: int, tier_label: str) -> None:
+        list_obj = self.get_list(list_id)
+        with self.db.tx() as conn:
+            exists = conn.execute(
+                "SELECT 1 FROM tiers WHERE list_id = ? AND tier_label = ?",
+                (list_id, tier_label),
+            ).fetchone()
+            if exists:
+                raise TierListError(f"Tier '{tier_label}' already exists.")
+            max_pos = conn.execute(
+                "SELECT COALESCE(MAX(position), -1) FROM tiers WHERE list_id = ?",
+                (list_id,),
+            ).fetchone()[0]
+            conn.execute(
+                "INSERT INTO tiers(list_id, tier_label, position) VALUES (?, ?, ?)",
+                (list_id, tier_label, max_pos + 1),
+            )
+            self._log(
+                conn, list_obj.guild_id, list_id, actor_id,
+                "tierlist.tier.add", {"tier_label": tier_label},
+            )
 
     def _log(
         self,

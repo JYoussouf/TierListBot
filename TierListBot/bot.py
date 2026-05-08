@@ -62,6 +62,7 @@ class TierListBotBot(commands.Bot):
 
         await self.load_extension("TierListBot.cogs.tierlist")
         await self.load_extension("TierListBot.cogs.bot_meta")
+        await self.load_extension("TierListBot.cogs.tier_shortcuts")
 
         if self.settings.discord_guild_id:
             guild_obj = discord.Object(id=self.settings.discord_guild_id)

@@ -5,7 +5,24 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 
-from TierListBot.models import DEFAULT_TIERS, Tier, TierItem, TierList
+from TierListBot.models import TierItem, TierList
+
+_DEFAULT_TIER_COLORS: dict[str, tuple[int, int, int]] = {
+    "S": (254, 105, 106),
+    "A": (255, 166, 89),
+    "B": (255, 219, 102),
+    "C": (156, 218, 120),
+    "D": (120, 181, 255),
+}
+
+_CUSTOM_PALETTE: list[tuple[int, int, int]] = [
+    (180, 120, 255),
+    (255, 120, 200),
+    (100, 220, 220),
+    (255, 180, 50),
+    (80, 200, 120),
+    (200, 100, 80),
+]
 
 
 class BoardRenderer:
@@ -13,8 +30,8 @@ class BoardRenderer:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def render(self, tier_list: TierList, items: list[TierItem]) -> Path:
-        grouped: dict[Tier, list[TierItem]] = defaultdict(list)
+    def render(self, tier_list: TierList, items: list[TierItem], tier_labels: list[str]) -> Path:
+        grouped: dict[str, list[TierItem]] = defaultdict(list)
         for item in items:
             grouped[item.tier].append(item)
 
@@ -22,9 +39,9 @@ class BoardRenderer:
         tier_label_width = 90
         cell_width = 140
         margin = 16
-        max_items_in_row = max((len(grouped[t]) for t in DEFAULT_TIERS), default=1)
+        max_items_in_row = max((len(grouped[t]) for t in tier_labels), default=1)
         board_width = margin * 2 + tier_label_width + max_items_in_row * cell_width
-        board_height = margin * 2 + len(DEFAULT_TIERS) * row_height + 40
+        board_height = margin * 2 + len(tier_labels) * row_height + 40
 
         image = Image.new("RGB", (board_width, board_height), color=(242, 245, 247))
         draw = ImageDraw.Draw(image)
@@ -33,16 +50,14 @@ class BoardRenderer:
         draw.rectangle([(0, 0), (board_width, 40)], fill=(27, 39, 53))
         draw.text((margin, 12), tier_list.name, fill=(255, 255, 255), font=font)
 
-        tier_colors = {
-            Tier.S: (254, 105, 106),
-            Tier.A: (255, 166, 89),
-            Tier.B: (255, 219, 102),
-            Tier.C: (156, 218, 120),
-            Tier.D: (120, 181, 255),
-        }
-
+        custom_color_idx = 0
         y = margin + 40
-        for tier in DEFAULT_TIERS:
+        for tier_label in tier_labels:
+            color = _DEFAULT_TIER_COLORS.get(tier_label)
+            if color is None:
+                color = _CUSTOM_PALETTE[custom_color_idx % len(_CUSTOM_PALETTE)]
+                custom_color_idx += 1
+
             draw.rectangle(
                 [(margin, y), (board_width - margin, y + row_height - 8)],
                 fill=(255, 255, 255),
@@ -51,12 +66,12 @@ class BoardRenderer:
             )
             draw.rectangle(
                 [(margin, y), (margin + tier_label_width, y + row_height - 8)],
-                fill=tier_colors[tier],
+                fill=color,
             )
-            draw.text((margin + 36, y + 50), tier.value, fill=(20, 20, 20), font=font)
+            draw.text((margin + 36, y + 50), tier_label[:4], fill=(20, 20, 20), font=font)
 
             x = margin + tier_label_width + 6
-            for item in grouped[tier]:
+            for item in grouped[tier_label]:
                 thumb = self._load_thumbnail(Path(item.image_path), size=120)
                 image.paste(thumb, (x, y + 6))
                 if item.label:

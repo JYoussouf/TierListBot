@@ -33,7 +33,7 @@ def test_renderer_generates_png_with_placeholder(tmp_path: Path):
     ]
 
     renderer = BoardRenderer(tmp_path)
-    output_path = renderer.render(tier_list, items)
+    output_path = renderer.render(tier_list, items, ["S", "A", "B", "C", "D"])
     assert output_path.exists()
 
     img = Image.open(output_path)
