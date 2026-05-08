@@ -563,38 +563,34 @@ class TierListCog(commands.Cog):
         embed.add_field(
             name="Adding images",
             value=(
-                "`/s image:<file>` · `/tl s image:<file>` — add to **S** tier\n"
-                "`/a image:<file>` · `/tl a image:<file>` — add to **A** tier\n"
-                "`/b image:<file>` · `/tl b image:<file>` — add to **B** tier\n"
-                "`/c image:<file>` · `/tl c image:<file>` — add to **C** tier\n"
-                "`/d image:<file>` · `/tl d image:<file>` — add to **D** tier\n"
-                "`/tl add image:<file>` — add image and pick the tier from buttons\n"
-                "\nThe board updates in place every time."
+                "`/s` `/a` `/b` `/c` `/d` — add an image directly to that tier\n"
+                "`/tl add` — add an image and pick the tier from buttons\n"
+                "The board edits in place every time."
             ),
             inline=False,
         )
         embed.add_field(
-            name="Custom tiers",
+            name="Tiers",
             value=(
-                "`/tl edit-tiers` — open a text editor to add, remove, or reorder all tiers at once\n"
-                "`/tl add-tier name:<label>` — quickly add a single custom tier row"
+                "`/tl add-tier name:<label>` — add a custom tier row\n"
+                "`/tl edit-tiers` — add, remove, or reorder all tiers at once"
             ),
             inline=False,
         )
         embed.add_field(
             name="Managing items",
-            value=(
-                "`/tl rearrange` — pick an item and destination tier from dropdowns\n"
-                "`/tl show` — delete the old board and re-post it at the bottom of chat"
-            ),
+            value="`/tl rearrange` — pick an item and a destination tier from dropdowns",
             inline=False,
         )
         embed.add_field(
-            name="History",
-            value="`/tl history` — browse finished tier lists and re-render any past board",
+            name="Board",
+            value=(
+                "`/tl show` — delete the old board and re-post it at the bottom of chat\n"
+                "`/tl history` — browse and re-render finished lists"
+            ),
             inline=False,
         )
-        embed.set_footer(text="All /tierlist commands also work as /tl shortcuts. One active list per channel.")
+        embed.set_footer(text="/tl and /tierlist are interchangeable. One active list per channel.")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
