@@ -17,6 +17,7 @@ Set `DISCORD_GUILD_ID` for instant guild-scoped command sync during dev. Leave i
 |---|---|
 | `/tl start name:…` | Start a new list, posts the board |
 | `/tl add` | Upload an image and pick the tier from buttons |
+| `/tl add-text text:…` | Add a text tile (white text on black square) |
 | `/tl edit-tiers` | Add, remove, or reorder all tiers at once |
 | `/tl rearrange` | Move an item to a different tier |
 | `/tl show` | Delete old board and re-post it at the bottom of chat |

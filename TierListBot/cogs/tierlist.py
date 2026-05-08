@@ -598,9 +598,10 @@ class TierListCog(commands.Cog):
             inline=False,
         )
         embed.add_field(
-            name="Adding images",
+            name="Adding items",
             value=(
                 "`/tl add` - upload an image and pick the tier from buttons\n"
+                "`/tl add-text text:<text>` - add a text tile (white text on black square)\n"
                 "The board edits in place every time."
             ),
             inline=False,
@@ -641,6 +642,22 @@ class TierListCog(commands.Cog):
     ) -> None:
         await self.add.callback(self, interaction, image, label)
 
+    @tl.command(name="add-text", description="Add a text entry to the active tier list")
+    @app_commands.describe(text="Text to display on the tile")
+    async def tl_add_text(self, interaction: discord.Interaction, text: str) -> None:
+        tier_list = await self._require_active(interaction)
+        if tier_list is None:
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        stored = self.image_store.save_text_image(text)
+        tier_labels = self.service.get_tiers_ordered(tier_list.id)
+        view = TierSelectView(
+            self, tier_list, tier_labels, stored, None, text[:40], interaction.user.id
+        )
+        await interaction.followup.send("Which tier?", view=view, ephemeral=True)
+
     @tl.command(name="edit-tiers", description="Edit, reorder, add, or remove tiers via a text editor")
     async def tl_edit_tiers(self, interaction: discord.Interaction) -> None:
         tier_list = await self._require_active(interaction)
@@ -653,6 +670,11 @@ class TierListCog(commands.Cog):
             return
         labels = self.service.get_tiers_ordered(tier_list.id)
         await interaction.response.send_modal(EditTiersModal(self, tier_list, labels))
+
+    @tierlist.command(name="add-text", description="Add a text entry to the active tier list")
+    @app_commands.describe(text="Text to display on the tile")
+    async def tierlist_add_text(self, interaction: discord.Interaction, text: str) -> None:
+        await self.tl_add_text.callback(self, interaction, text)
 
     @tierlist.command(name="edit-tiers", description="Edit, reorder, add, or remove tiers via a text editor")
     async def tierlist_edit_tiers(self, interaction: discord.Interaction) -> None:
