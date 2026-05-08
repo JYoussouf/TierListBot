@@ -1,71 +1,39 @@
 # TierListBot
 
-A Discord bot for creating and sharing tier lists with uploaded images — entirely inside Discord.
+Discord bot for group tier lists. Posts a live board image to the channel that updates in place as people add images.
 
-## Features
+## Running
 
-- Live board: creating a list posts a rendered image to the channel and updates it in-place as items are added
-- Shorthand commands `/s` `/a` `/b` `/c` `/d` for fast image uploads
-- Custom tiers with word-wrapped labels and automatic color assignment
-- Interactive rearrange UI (pick item + destination tier from dropdowns)
-- One active list per channel; history of finished lists
-- SQLite persistence, local image storage, Pillow-rendered PNG boards
-- Optional top.gg guild count reporting
+```bash
+cp .env.example .env  # fill in DISCORD_TOKEN, DISCORD_APPLICATION_ID
+python -m TierListBot
+```
+
+Set `DISCORD_GUILD_ID` for instant guild-scoped command sync during dev. Leave it blank for global sync in prod.
 
 ## Commands
 
-| Command | Description |
+| Command | What it does |
 |---|---|
-| `/tl start name:<string>` | Start a new tier list and post the live board |
-| `/s image:<file>` | Add image to S tier |
-| `/a image:<file>` | Add image to A tier |
-| `/b image:<file>` | Add image to B tier |
-| `/c image:<file>` | Add image to C tier |
-| `/d image:<file>` | Add image to D tier |
-| `/tl add image:<file>` | Add image and pick the tier from buttons |
-| `/tl add-tier name:<label>` | Add a custom tier row |
-| `/tl edit-tiers` | Open a text editor to add, remove, or reorder all tiers |
-| `/tl rearrange` | Move an item to a different tier via dropdowns |
-| `/tl show` | Re-post the board publicly |
-| `/tl finish` | Mark the list complete and free the channel |
-| `/tl delete` | Permanently delete the active list |
-| `/tl history` | Browse and re-render finished lists |
-| `/tl help` | Show command reference |
+| `/tl start name:…` | Start a new list, posts the board |
+| `/s` `/a` `/b` `/c` `/d` | Add an image to that tier |
+| `/tl add` | Add image + pick tier from buttons |
+| `/tl add-tier name:…` | Add a custom tier row |
+| `/tl edit-tiers` | Reorder / add / remove all tiers at once |
+| `/tl rearrange` | Move an item to a different tier |
+| `/tl finish` | Close the list, frees the channel |
+| `/tl delete` | Permanently delete it |
+| `/tl history` | Re-render past lists |
 
-All `/tl` commands are also available as `/tierlist`.
+`/tl` and `/tierlist` are interchangeable.
 
-## Setup
-
-1. Create and activate a virtual environment.
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Copy and fill the env file:
-   ```bash
-   cp .env.example .env
-   ```
-4. Run:
-   ```bash
-   python -m TierListBot
-   ```
-
-## Testing
+## Tests
 
 ```bash
 pytest -q
 ```
 
-## Project Layout
-
-- `TierListBot/config.py` — env settings loader
-- `TierListBot/bot.py` — app bootstrap and command sync
-- `TierListBot/cogs/` — slash commands, views, modals
-- `TierListBot/services/` — DB, domain logic, image storage, renderer, top.gg
-
-## Invite
-
-OAuth2 scopes: `bot` + `applications.commands`
+## Invite URL
 
 ```
 https://discord.com/oauth2/authorize?client_id=<DISCORD_APPLICATION_ID>&scope=bot%20applications.commands&permissions=274877975552
