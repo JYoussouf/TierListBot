@@ -101,7 +101,7 @@ class TierShortcutsCog(commands.Cog):
             )
             self.service.update_message_id(tier_list.id, str(fallback_msg.id))
 
-        await interaction.followup.send("​", ephemeral=True)
+        await interaction.delete_original_response()
 
     @app_commands.command(name="s", description="Shortcut to add an image to S tier")
     @app_commands.describe(image="Image to add")
@@ -163,7 +163,7 @@ class TierShortcutsCog(commands.Cog):
         except discord.HTTPException as exc:
             logger.warning("Failed to edit board message: %s", exc)
 
-        await interaction.followup.send("​", ephemeral=True)
+        await interaction.delete_original_response()
 
 
 async def setup(bot: commands.Bot) -> None:

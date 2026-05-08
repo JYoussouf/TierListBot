@@ -178,7 +178,7 @@ async def test_add_to_tier_happy_path_edits_board_message(tmp_path: Path):
 
     ch.get_partial_message.assert_called_once_with(999888)
     partial.edit.assert_called_once()
-    inter.followup.send.assert_called_once()
+    inter.delete_original_response.assert_called_once()
 
 
 async def test_add_to_tier_item_persisted_in_db(tmp_path: Path):
@@ -255,7 +255,7 @@ async def test_add_to_tier_fallback_posts_new_message_on_http_exception(tmp_path
     assert updated.message_id == "777777"
 
 
-async def test_add_to_tier_fallback_still_sends_followup(tmp_path: Path):
+async def test_add_to_tier_fallback_deletes_original_response(tmp_path: Path):
     cog, svc, image_store = _make_cog(tmp_path)
     tl = svc.create_list(1, 42, 100, "Test")
     svc.update_message_id(tl.id, "999")
@@ -270,7 +270,7 @@ async def test_add_to_tier_fallback_still_sends_followup(tmp_path: Path):
 
     await cog._add_to_tier(inter, "D", _attachment())
 
-    inter.followup.send.assert_called_once()
+    inter.delete_original_response.assert_called_once()
 
 
 # ── shorthand command callbacks ───────────────────────────────────────────────
@@ -370,11 +370,11 @@ async def test_add_tier_cmd_renderer_includes_new_tier(tmp_path: Path):
     assert "god-tier" in labels_arg
 
 
-async def test_add_tier_cmd_sends_ephemeral_confirmation(tmp_path: Path):
+async def test_add_tier_cmd_deletes_original_response(tmp_path: Path):
     cog, svc, _ = _make_cog(tmp_path)
     tl = svc.create_list(1, 42, 100, "Test")
     svc.update_message_id(tl.id, "111")
     ch, _ = _channel()
     inter = _interaction(channel=ch)
     await cog._add_tier_to_list(inter, name="god-tier")
-    inter.followup.send.assert_called_once()
+    inter.delete_original_response.assert_called_once()

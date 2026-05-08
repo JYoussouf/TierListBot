@@ -65,7 +65,7 @@ class EditTiersModal(discord.ui.Modal, title="Edit Tiers"):
             )
             self.cog.service.update_message_id(tier_list.id, str(new_msg.id))
 
-        await interaction.followup.send("​", ephemeral=True)
+        await interaction.delete_original_response()
 
 
 # ── Views ─────────────────────────────────────────────────────────────────────
@@ -84,6 +84,7 @@ class DeleteConfirmView(discord.ui.View):
         except NotFoundError:
             pass
         await interaction.response.edit_message(content="​", view=None)
+        await interaction.delete_original_response()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -196,6 +197,7 @@ class TierSelectView(discord.ui.View):
                 self.cog.service.update_message_id(self.tier_list.id, str(new_msg.id))
 
         await interaction.response.edit_message(content="​", view=None)
+        await interaction.delete_original_response()
 
 
 class MoveItemView(discord.ui.View):
@@ -308,6 +310,7 @@ class MoveItemView(discord.ui.View):
                 new_positional = f"{it.tier}{n}"
                 break
         await interaction.response.edit_message(content="​", view=None)
+        await interaction.delete_original_response()
 
 
 # ── Cog ───────────────────────────────────────────────────────────────────────
@@ -397,7 +400,7 @@ class TierListCog(commands.Cog):
         )
         self.service.update_message_id(tier_list.id, str(board_msg.id))
 
-        await interaction.followup.send("​", ephemeral=True)
+        await interaction.delete_original_response()
 
     @tierlist.command(name="add", description="Add an image to the active tier list")
     @app_commands.describe(image="Image attachment", label="Optional label")
@@ -486,7 +489,7 @@ class TierListCog(commands.Cog):
             file=discord.File(output_path, filename=f"{tier_list.id}.png")
         )
         self.service.update_message_id(tier_list.id, str(new_msg.id))
-        await interaction.followup.send("​", ephemeral=True)
+        await interaction.delete_original_response()
 
     @tierlist.command(name="finish", description="Mark the active tier list as complete and free the channel")
     async def finish(self, interaction: discord.Interaction) -> None:
