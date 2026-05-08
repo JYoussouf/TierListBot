@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS tier_lists (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     message_id TEXT,
+    finished_at TEXT,
     FOREIGN KEY(guild_id) REFERENCES guilds(guild_id)
 );
 
@@ -82,7 +83,12 @@ class Database:
                 self._conn.execute("ALTER TABLE tier_lists ADD COLUMN message_id TEXT")
                 self._conn.commit()
             except sqlite3.OperationalError:
-                pass  # column already exists
+                pass
+            try:
+                self._conn.execute("ALTER TABLE tier_lists ADD COLUMN finished_at TEXT")
+                self._conn.commit()
+            except sqlite3.OperationalError:
+                pass
 
     def get_active_list_by_channel(self, channel_id: int) -> sqlite3.Row | None:
         with self._lock:
@@ -94,6 +100,17 @@ class Database:
                 """,
                 (channel_id,),
             ).fetchone()
+
+    def get_finished_lists(self, channel_id: int, limit: int = 10) -> list[sqlite3.Row]:
+        with self._lock:
+            return self._conn.execute(
+                """
+                SELECT * FROM tier_lists
+                WHERE channel_id = ? AND finished_at IS NOT NULL
+                ORDER BY finished_at DESC LIMIT ?
+                """,
+                (channel_id, limit),
+            ).fetchall()
 
     def update_message_id(self, list_id: str, message_id: str) -> None:
         with self._lock:

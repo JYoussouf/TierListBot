@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from TierListBot.models import Tier
 from TierListBot.services.db import Database
 from TierListBot.services.image_store import StoredImage
 from TierListBot.services.tierlist_service import TierListService
@@ -21,7 +20,7 @@ def test_command_like_flow_create_add_move_render_data(tmp_path: Path):
         list_id=tier_list.id,
         actor_id=333,
         label="Naruto",
-        tier=Tier.D,
+        tier="D",
         image=StoredImage(
             path=image_path,
             sha256="hash",
@@ -31,11 +30,11 @@ def test_command_like_flow_create_add_move_render_data(tmp_path: Path):
         original_filename="a.png",
     )
 
-    service.move_item(tier_list.id, item.id, actor_id=333, tier=Tier.A)
+    service.move_item(tier_list.id, item.id, actor_id=333, tier="A")
 
     reloaded = service.get_list(tier_list.id)
     assert reloaded.guild_id == 111
     assert reloaded.owner_id == 333
     items = service.list_items(tier_list.id)
     assert len(items) == 1
-    assert items[0].tier == Tier.A
+    assert items[0].tier == "A"

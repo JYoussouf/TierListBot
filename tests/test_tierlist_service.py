@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from TierListBot.models import Tier
 from TierListBot.services.db import Database
 from TierListBot.services.image_store import StoredImage
 from TierListBot.services.tierlist_service import LimitError, TierListService
@@ -24,18 +23,18 @@ def test_create_add_move_and_persist(tmp_path: Path):
         list_id=tier_list.id,
         actor_id=10,
         label="Chess",
-        tier=Tier.D,
+        tier="D",
         image=StoredImage(path=image_path, sha256="x", content_type="image/png", size=4),
         original_filename="img.png",
     )
 
-    moved = service.move_item(tier_list.id, item.id, 10, Tier.S)
-    assert moved.tier == Tier.S
+    moved = service.move_item(tier_list.id, item.id, 10, "S")
+    assert moved.tier == "S"
 
     reloaded = service.get_list(tier_list.id)
     items = service.list_items(reloaded.id)
     assert len(items) == 1
-    assert items[0].tier == Tier.S
+    assert items[0].tier == "S"
 
 
 def test_limits_enforced(tmp_path: Path):
@@ -54,7 +53,7 @@ def test_limits_enforced(tmp_path: Path):
         list_id=first.id,
         actor_id=10,
         label="Item1",
-        tier=Tier.D,
+        tier="D",
         image=StoredImage(path=image_path, sha256="x", content_type="image/png", size=4),
         original_filename="img.png",
     )
@@ -64,7 +63,7 @@ def test_limits_enforced(tmp_path: Path):
             list_id=first.id,
             actor_id=10,
             label="Item2",
-            tier=Tier.D,
+            tier="D",
             image=StoredImage(path=image_path, sha256="y", content_type="image/png", size=4),
             original_filename="img.png",
         )

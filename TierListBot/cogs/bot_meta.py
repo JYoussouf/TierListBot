@@ -3,15 +3,12 @@ from __future__ import annotations
 import logging
 
 import discord
-from discord import app_commands
 from discord.ext import commands, tasks
 
 logger = logging.getLogger(__name__)
 
 
 class BotMetaCog(commands.Cog):
-    meta = app_commands.Group(name="bot", description="Bot operational commands")
-
     def __init__(self, bot: commands.Bot, support_url: str):
         self.bot = bot
         self.support_url = support_url
@@ -20,24 +17,6 @@ class BotMetaCog(commands.Cog):
 
     def cog_unload(self) -> None:
         self.topgg_stats_loop.cancel()
-
-    @meta.command(name="status", description="Check bot health")
-    async def status(self, interaction: discord.Interaction) -> None:
-        guilds = len(self.bot.guilds)
-        latency_ms = round(self.bot.latency * 1000, 1)
-        topgg_enabled = "yes" if self._topgg else "no"
-        await interaction.response.send_message(
-            "\n".join(
-                [
-                    "TierListBot is online.",
-                    f"Guilds: **{guilds}**",
-                    f"Latency: **{latency_ms}ms**",
-                    f"top.gg stats posting: **{topgg_enabled}**",
-                    f"Support: {self.support_url}",
-                ]
-            ),
-            ephemeral=True,
-        )
 
     @tasks.loop(minutes=30)
     async def topgg_stats_loop(self) -> None:
@@ -57,5 +36,4 @@ class BotMetaCog(commands.Cog):
 async def setup(bot: commands.Bot) -> None:
     support_url = bot.deps["settings"].support_server_url
     cog = BotMetaCog(bot, support_url=support_url)
-    bot.tree.add_command(cog.meta)
     await bot.add_cog(cog)

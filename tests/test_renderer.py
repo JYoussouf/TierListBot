@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from TierListBot.models import Tier, TierItem, TierList
+from TierListBot.models import TierItem, TierList
 from TierListBot.services.renderer import BoardRenderer
 
 
@@ -25,7 +25,7 @@ def test_renderer_generates_png_with_placeholder(tmp_path: Path):
             id="item1",
             list_id=tier_list.id,
             label="Broken",
-            tier=Tier.S,
+            tier="S",
             image_path=str(missing_path),
             created_by=1,
             created_at=datetime.now(timezone.utc),

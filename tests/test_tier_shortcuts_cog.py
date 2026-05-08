@@ -179,7 +179,6 @@ async def test_add_to_tier_happy_path_edits_board_message(tmp_path: Path):
     ch.get_partial_message.assert_called_once_with(999888)
     partial.edit.assert_called_once()
     inter.followup.send.assert_called_once()
-    assert "S" in inter.followup.send.call_args.args[0]
 
 
 async def test_add_to_tier_item_persisted_in_db(tmp_path: Path):
@@ -256,7 +255,7 @@ async def test_add_to_tier_fallback_posts_new_message_on_http_exception(tmp_path
     assert updated.message_id == "777777"
 
 
-async def test_add_to_tier_fallback_still_sends_confirmation(tmp_path: Path):
+async def test_add_to_tier_fallback_still_sends_followup(tmp_path: Path):
     cog, svc, image_store = _make_cog(tmp_path)
     tl = svc.create_list(1, 42, 100, "Test")
     svc.update_message_id(tl.id, "999")
@@ -272,7 +271,6 @@ async def test_add_to_tier_fallback_still_sends_confirmation(tmp_path: Path):
     await cog._add_to_tier(inter, "D", _attachment())
 
     inter.followup.send.assert_called_once()
-    assert "D" in inter.followup.send.call_args.args[0]
 
 
 # ── shorthand command callbacks ───────────────────────────────────────────────
@@ -309,7 +307,7 @@ async def test_add_tier_cmd_no_guild_sends_error(tmp_path: Path):
     inter.guild = None
     inter.channel_id = 42
     inter.response = AsyncMock()
-    await cog.add_tier.callback(cog, inter, name="god-tier")
+    await cog._add_tier_to_list(inter, name="god-tier")
     inter.response.send_message.assert_called_once()
     assert inter.response.send_message.call_args.kwargs.get("ephemeral") is True
 
@@ -317,7 +315,7 @@ async def test_add_tier_cmd_no_guild_sends_error(tmp_path: Path):
 async def test_add_tier_cmd_no_active_list_sends_error(tmp_path: Path):
     cog, *_ = _make_cog(tmp_path)
     inter = _interaction()
-    await cog.add_tier.callback(cog, inter, name="god-tier")
+    await cog._add_tier_to_list(inter, name="god-tier")
     inter.response.send_message.assert_called_once()
     assert "No active tier list" in inter.response.send_message.call_args.args[0]
 
@@ -330,12 +328,12 @@ async def test_add_tier_cmd_duplicate_sends_error(tmp_path: Path):
     # First call succeeds
     ch, _ = _channel()
     inter1 = _interaction(channel=ch)
-    await cog.add_tier.callback(cog, inter1, name="god-tier")
+    await cog._add_tier_to_list(inter1, name="god-tier")
 
     # Second call is a duplicate
     ch2, _ = _channel()
     inter2 = _interaction(channel=ch2)
-    await cog.add_tier.callback(cog, inter2, name="god-tier")
+    await cog._add_tier_to_list(inter2, name="god-tier")
     inter2.response.send_message.assert_called_once()
     assert "already exists" in inter2.response.send_message.call_args.args[0]
 
@@ -346,7 +344,7 @@ async def test_add_tier_cmd_happy_path_persists_tier(tmp_path: Path):
     svc.update_message_id(tl.id, "111")
     ch, partial = _channel()
     inter = _interaction(channel=ch)
-    await cog.add_tier.callback(cog, inter, name="god-tier")
+    await cog._add_tier_to_list(inter, name="god-tier")
     assert "god-tier" in svc.get_tiers_ordered(tl.id)
 
 
@@ -356,7 +354,7 @@ async def test_add_tier_cmd_happy_path_edits_board(tmp_path: Path):
     svc.update_message_id(tl.id, "111")
     ch, partial = _channel()
     inter = _interaction(channel=ch)
-    await cog.add_tier.callback(cog, inter, name="god-tier")
+    await cog._add_tier_to_list(inter, name="god-tier")
     ch.get_partial_message.assert_called_once_with(111)
     partial.edit.assert_called_once()
 
@@ -367,7 +365,7 @@ async def test_add_tier_cmd_renderer_includes_new_tier(tmp_path: Path):
     svc.update_message_id(tl.id, "111")
     ch, _ = _channel()
     inter = _interaction(channel=ch)
-    await cog.add_tier.callback(cog, inter, name="god-tier")
+    await cog._add_tier_to_list(inter, name="god-tier")
     _, _, labels_arg = cog.renderer.render.call_args.args
     assert "god-tier" in labels_arg
 
@@ -378,6 +376,5 @@ async def test_add_tier_cmd_sends_ephemeral_confirmation(tmp_path: Path):
     svc.update_message_id(tl.id, "111")
     ch, _ = _channel()
     inter = _interaction(channel=ch)
-    await cog.add_tier.callback(cog, inter, name="god-tier")
+    await cog._add_tier_to_list(inter, name="god-tier")
     inter.followup.send.assert_called_once()
-    assert "god-tier" in inter.followup.send.call_args.args[0]

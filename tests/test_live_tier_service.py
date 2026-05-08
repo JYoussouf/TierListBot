@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from TierListBot.models import Tier
 from TierListBot.services.db import Database
 from TierListBot.services.image_store import StoredImage
 from TierListBot.services.tierlist_service import (
@@ -143,18 +142,6 @@ def test_get_active_list_skips_lists_without_message_id(tmp_path: Path):
     assert result.id == with_msg.id
 
 
-# ── tier-as-str backward compatibility ───────────────────────────────────────
-
-
-def test_tier_enum_values_equal_strings(tmp_path: Path):
-    # Tier(str, Enum) means Tier.S == "S" — essential for backward compat
-    assert Tier.S == "S"
-    assert Tier.A == "A"
-    assert Tier.B == "B"
-    assert Tier.C == "C"
-    assert Tier.D == "D"
-
-
 def test_add_item_with_string_tier(tmp_path: Path):
     svc = _svc(tmp_path)
     tl = svc.create_list(1, 1, 1, "Test")
@@ -167,20 +154,6 @@ def test_add_item_with_string_tier(tmp_path: Path):
         original_filename="img.png",
     )
     assert item.tier == "S"
-
-
-def test_add_item_with_tier_enum_still_works(tmp_path: Path):
-    svc = _svc(tmp_path)
-    tl = svc.create_list(1, 1, 1, "Test")
-    item = svc.add_item(
-        list_id=tl.id,
-        actor_id=1,
-        label=None,
-        tier=Tier.D,
-        image=_img(tmp_path),
-        original_filename="img.png",
-    )
-    assert item.tier == "D"
 
 
 def test_list_items_returns_string_tiers(tmp_path: Path):

@@ -1,28 +1,107 @@
 from __future__ import annotations
 
+import textwrap
 from collections import defaultdict
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 
 from TierListBot.models import TierItem, TierList
+from TierListBot.services.tierlist_service import LABEL_MAX_LINES, LABEL_WRAP_WIDTH
+
+# ── palette ───────────────────────────────────────────────────────────────────
 
 _DEFAULT_TIER_COLORS: dict[str, tuple[int, int, int]] = {
-    "S": (254, 105, 106),
-    "A": (255, 166, 89),
-    "B": (255, 219, 102),
-    "C": (156, 218, 120),
-    "D": (120, 181, 255),
+    "S": (255, 115, 115),   # salmon / coral
+    "A": (255, 178, 115),   # peach
+    "B": (255, 223, 107),   # golden yellow
+    "C": (243, 241,  96),   # bright yellow
+    "D": (142, 255, 128),   # lime green
 }
 
 _CUSTOM_PALETTE: list[tuple[int, int, int]] = [
-    (180, 120, 255),
-    (255, 120, 200),
-    (100, 220, 220),
-    (255, 180, 50),
-    (80, 200, 120),
-    (200, 100, 80),
+    (160,  90, 255),
+    (255,  90, 190),
+    ( 64, 210, 210),
+    (255, 170,  40),
+    ( 60, 190, 110),
+    (210,  90,  70),
 ]
+
+# ── dark-mode colours ─────────────────────────────────────────────────────────
+
+_BG         = (19,  19,  19)   # board background
+_HEADER_BG  = (10,  10,  10)   # title bar
+_ROW_BG     = (19,  19,  19)   # content-area background (matches template)
+_DIVIDER    = (35,  35,  35)   # 1 px line between rows
+_THUMB_BG   = (45,  45,  45)   # letterbox fill behind thumbnails
+_WHITE      = (255, 255, 255)
+_LABEL_TEXT = ( 20,  20,  20)  # dark label text (matches template)
+_ITEM_TAG   = (  0,   0,   0)  # item-label overlay
+
+# ── layout constants ──────────────────────────────────────────────────────────
+
+_HEADER_H  = 44               # slim title bar
+_ROW_H     = 114              # matches template row height
+_LABEL_W   = 140              # wider label cell (matches template ~10% of width)
+_CELL_W    = 114              # square thumbnail cell
+_THUMB_PAD = 5                # padding around each thumbnail inside its cell
+_ROW_GAP   = 1               # 1 px divider between rows
+_MIN_COLS  = 5               # minimum empty columns shown on the board
+
+
+def _label_font(draw: ImageDraw.ImageDraw, text: str, max_px: int) -> ImageFont.ImageFont:
+    for size in (32, 24, 17, 12):
+        font = ImageFont.load_default(size=size)
+        bb = draw.textbbox((0, 0), text, font=font)
+        if bb[2] - bb[0] <= max_px:
+            return font
+    return ImageFont.load_default(size=12)
+
+
+def _draw_tier_label(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    cell_x: int,
+    cell_y: int,
+    cell_w: int,
+    cell_h: int,
+    color: tuple[int, int, int],
+) -> None:
+    """Draw a tier label, word-wrapping if it contains spaces."""
+    lines = textwrap.wrap(text, LABEL_WRAP_WIDTH) or [text]
+    lines = lines[:LABEL_MAX_LINES]
+
+    widest = max(lines, key=len)
+    font = _label_font(draw, widest, cell_w - 12)
+
+    bb = draw.textbbox((0, 0), "Ag", font=font)
+    line_h = bb[3] - bb[1] + 3
+    total_h = line_h * len(lines)
+    start_y = cell_y + (cell_h - total_h) // 2
+
+    for i, line in enumerate(lines):
+        _center_text(draw, line, font, cell_x, start_y + i * line_h, cell_w, line_h, color)
+
+
+def _center_text(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font: ImageFont.ImageFont,
+    cell_x: int,
+    cell_y: int,
+    cell_w: int,
+    cell_h: int,
+    color: tuple[int, int, int],
+) -> None:
+    bb = draw.textbbox((0, 0), text, font=font)
+    tw, th = bb[2] - bb[0], bb[3] - bb[1]
+    draw.text(
+        (cell_x + (cell_w - tw) // 2 - bb[0], cell_y + (cell_h - th) // 2 - bb[1]),
+        text,
+        fill=color,
+        font=font,
+    )
 
 
 class BoardRenderer:
@@ -35,53 +114,52 @@ class BoardRenderer:
         for item in items:
             grouped[item.tier].append(item)
 
-        row_height = 140
-        tier_label_width = 90
-        cell_width = 140
-        margin = 16
-        max_items_in_row = max((len(grouped[t]) for t in tier_labels), default=1)
-        board_width = margin * 2 + tier_label_width + max_items_in_row * cell_width
-        board_height = margin * 2 + len(tier_labels) * row_height + 40
+        max_cols = max((len(grouped[t]) for t in tier_labels), default=0)
+        cols     = max(max_cols, _MIN_COLS)
+        board_w  = _LABEL_W + cols * _CELL_W
+        board_h  = _HEADER_H + len(tier_labels) * (_ROW_H + _ROW_GAP)
 
-        image = Image.new("RGB", (board_width, board_height), color=(242, 245, 247))
-        draw = ImageDraw.Draw(image)
-        font = ImageFont.load_default()
+        image = Image.new("RGB", (board_w, board_h), color=_BG)
+        draw  = ImageDraw.Draw(image)
 
-        draw.rectangle([(0, 0), (board_width, 40)], fill=(27, 39, 53))
-        draw.text((margin, 12), tier_list.name, fill=(255, 255, 255), font=font)
+        # ── header ────────────────────────────────────────────────────────────
+        draw.rectangle([(0, 0), (board_w, _HEADER_H)], fill=_HEADER_BG)
+        title_font = ImageFont.load_default(size=14)
+        _center_text(draw, tier_list.name, title_font, 0, 0, board_w, _HEADER_H, _WHITE)
 
-        custom_color_idx = 0
-        y = margin + 40
-        for tier_label in tier_labels:
+        # ── tier rows ─────────────────────────────────────────────────────────
+        custom_idx = 0
+        for i, tier_label in enumerate(tier_labels):
             color = _DEFAULT_TIER_COLORS.get(tier_label)
             if color is None:
-                color = _CUSTOM_PALETTE[custom_color_idx % len(_CUSTOM_PALETTE)]
-                custom_color_idx += 1
+                color = _CUSTOM_PALETTE[custom_idx % len(_CUSTOM_PALETTE)]
+                custom_idx += 1
 
-            draw.rectangle(
-                [(margin, y), (board_width - margin, y + row_height - 8)],
-                fill=(255, 255, 255),
-                outline=(214, 220, 227),
-                width=2,
-            )
-            draw.rectangle(
-                [(margin, y), (margin + tier_label_width, y + row_height - 8)],
-                fill=color,
-            )
-            draw.text((margin + 36, y + 50), tier_label[:4], fill=(20, 20, 20), font=font)
+            ry = _HEADER_H + i * (_ROW_H + _ROW_GAP)
 
-            x = margin + tier_label_width + 6
+            # content-area background
+            draw.rectangle([(0, ry), (board_w, ry + _ROW_H)], fill=_ROW_BG)
+
+            # 1 px divider above each row (except the first)
+            if i > 0:
+                draw.line([(0, ry), (board_w, ry)], fill=_DIVIDER)
+
+            # coloured label cell
+            draw.rectangle([(0, ry), (_LABEL_W, ry + _ROW_H)], fill=color)
+            _draw_tier_label(draw, tier_label, 0, ry, _LABEL_W, _ROW_H, _LABEL_TEXT)
+
+            # thumbnails
+            x = _LABEL_W
+            thumb_size = _CELL_W - _THUMB_PAD * 2
             for item in grouped[tier_label]:
-                thumb = self._load_thumbnail(Path(item.image_path), size=120)
-                image.paste(thumb, (x, y + 6))
+                thumb = self._load_thumbnail(Path(item.image_path), thumb_size)
+                image.paste(thumb, (x + _THUMB_PAD, ry + _THUMB_PAD))
                 if item.label:
-                    draw.rectangle(
-                        [(x, y + 104), (x + 120, y + 126)], fill=(0, 0, 0)
-                    )
-                    draw.text((x + 4, y + 109), item.label[:18], fill=(255, 255, 255), font=font)
-                x += cell_width
-
-            y += row_height
+                    tag_y = ry + _ROW_H - 20
+                    draw.rectangle([(x, tag_y), (x + _CELL_W, ry + _ROW_H)], fill=_ITEM_TAG)
+                    tag_font = ImageFont.load_default(size=11)
+                    draw.text((x + 4, tag_y + 3), item.label[:16], fill=_WHITE, font=tag_font)
+                x += _CELL_W
 
         out_path = self.output_dir / f"render-{tier_list.id}.png"
         image.save(out_path, format="PNG")
@@ -91,15 +169,12 @@ class BoardRenderer:
         try:
             img = Image.open(path).convert("RGB")
             img.thumbnail((size, size))
-            canvas = Image.new("RGB", (size, size), color=(230, 232, 235))
-            x = (size - img.width) // 2
-            y = (size - img.height) // 2
-            canvas.paste(img, (x, y))
+            canvas = Image.new("RGB", (size, size), color=_THUMB_BG)
+            canvas.paste(img, ((size - img.width) // 2, (size - img.height) // 2))
             return canvas
         except (FileNotFoundError, UnidentifiedImageError, OSError):
-            # Fallback placeholder if image can't be opened.
-            placeholder = Image.new("RGB", (size, size), color=(222, 226, 230))
+            placeholder = Image.new("RGB", (size, size), color=_THUMB_BG)
             draw = ImageDraw.Draw(placeholder)
-            draw.line([(0, 0), (size, size)], fill=(150, 150, 150), width=3)
-            draw.line([(size, 0), (0, size)], fill=(150, 150, 150), width=3)
+            draw.line([(0, 0), (size, size)], fill=(70, 70, 70), width=2)
+            draw.line([(size, 0), (0, size)], fill=(70, 70, 70), width=2)
             return placeholder

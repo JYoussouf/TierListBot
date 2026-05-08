@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import textwrap
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -9,6 +10,18 @@ from uuid import uuid4
 from TierListBot.models import DEFAULT_TIERS, TierItem, TierList
 from TierListBot.services.db import Database
 from TierListBot.services.image_store import StoredImage
+
+
+# Label rendering constraints — must match renderer.py constants
+LABEL_WRAP_WIDTH = 18
+LABEL_MAX_LINES  = 5
+LABEL_MAX_CHARS  = LABEL_WRAP_WIDTH * LABEL_MAX_LINES  # 90
+
+
+def tier_label_line_count(label: str) -> int:
+    """Lines the label would occupy when word-wrapped for the board."""
+    lines = textwrap.wrap(label, LABEL_WRAP_WIDTH, break_long_words=True)
+    return len(lines) if lines else 1
 
 
 class TierListError(RuntimeError):
@@ -65,7 +78,7 @@ class TierListService:
             for idx, tier in enumerate(DEFAULT_TIERS):
                 conn.execute(
                     "INSERT INTO tiers(list_id, tier_label, position) VALUES (?, ?, ?)",
-                    (list_id, tier.value, idx),
+                    (list_id, tier, idx),
                 )
 
             self._log(conn, guild_id, list_id, owner_id, "tierlist.create", {"name": name})
@@ -86,6 +99,7 @@ class TierListService:
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
             message_id=row["message_id"],
+            finished_at=datetime.fromisoformat(row["finished_at"]) if row["finished_at"] else None,
         )
 
     def list_items(self, list_id: str) -> list[TierItem]:
@@ -268,10 +282,39 @@ class TierListService:
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
             message_id=row["message_id"],
+            finished_at=datetime.fromisoformat(row["finished_at"]) if row["finished_at"] else None,
         )
 
     def update_message_id(self, list_id: str, message_id: str) -> None:
         self.db.update_message_id(list_id, message_id)
+
+    def finish_list(self, list_id: str, actor_id: int) -> TierList:
+        list_obj = self.get_list(list_id)
+        now = self.db.utc_now()
+        with self.db.tx() as conn:
+            conn.execute(
+                "UPDATE tier_lists SET message_id = NULL, finished_at = ? WHERE id = ?",
+                (now, list_id),
+            )
+            self._log(conn, list_obj.guild_id, list_id, actor_id, "tierlist.finish", {})
+        return self.get_list(list_id)
+
+    def get_history(self, channel_id: int, limit: int = 10) -> list[TierList]:
+        rows = self.db.get_finished_lists(channel_id, limit)
+        return [
+            TierList(
+                id=row["id"],
+                guild_id=row["guild_id"],
+                channel_id=row["channel_id"],
+                owner_id=row["owner_id"],
+                name=row["name"],
+                created_at=datetime.fromisoformat(row["created_at"]),
+                updated_at=datetime.fromisoformat(row["updated_at"]),
+                message_id=row["message_id"],
+                finished_at=datetime.fromisoformat(row["finished_at"]) if row["finished_at"] else None,
+            )
+            for row in rows
+        ]
 
     def get_tiers_ordered(self, list_id: str) -> list[str]:
         with self.db.tx() as conn:
@@ -282,6 +325,12 @@ class TierListService:
         return [row["tier_label"] for row in rows]
 
     def add_tier(self, list_id: str, actor_id: int, tier_label: str) -> None:
+        if tier_label_line_count(tier_label) > LABEL_MAX_LINES:
+            raise LimitError(
+                f"Tier label is too long ({len(tier_label)} chars). "
+                f"Labels wrap at {LABEL_WRAP_WIDTH} characters per line with a max of "
+                f"{LABEL_MAX_LINES} lines — keep it under {LABEL_MAX_CHARS} characters."
+            )
         list_obj = self.get_list(list_id)
         with self.db.tx() as conn:
             exists = conn.execute(
@@ -301,6 +350,54 @@ class TierListService:
             self._log(
                 conn, list_obj.guild_id, list_id, actor_id,
                 "tierlist.tier.add", {"tier_label": tier_label},
+            )
+
+    def set_tiers(self, list_id: str, actor_id: int, new_labels: list[str]) -> None:
+        """Replace all tiers with new_labels (in order). Items in removed tiers move to the first new tier."""
+        if not new_labels:
+            raise TierListError("A tier list must have at least one tier.")
+        seen: set[str] = set()
+        for label in new_labels:
+            if not label.strip():
+                raise TierListError("Tier labels cannot be blank.")
+            if label in seen:
+                raise TierListError(f"Duplicate tier label: '{label}'.")
+            if tier_label_line_count(label) > LABEL_MAX_LINES:
+                raise LimitError(
+                    f"'{label}' is too long ({len(label)} chars). "
+                    f"Max {LABEL_MAX_CHARS} characters ({LABEL_MAX_LINES} lines × {LABEL_WRAP_WIDTH})."
+                )
+            seen.add(label)
+
+        list_obj = self.get_list(list_id)
+        with self.db.tx() as conn:
+            old_labels = [
+                row["tier_label"]
+                for row in conn.execute(
+                    "SELECT tier_label FROM tiers WHERE list_id = ? ORDER BY position",
+                    (list_id,),
+                ).fetchall()
+            ]
+            removed = set(old_labels) - set(new_labels)
+            if removed:
+                fallback = new_labels[0]
+                for gone in removed:
+                    conn.execute(
+                        "UPDATE items SET tier = ? WHERE list_id = ? AND tier = ?",
+                        (fallback, list_id, gone),
+                    )
+            conn.execute("DELETE FROM tiers WHERE list_id = ?", (list_id,))
+            for idx, label in enumerate(new_labels):
+                conn.execute(
+                    "INSERT INTO tiers(list_id, tier_label, position) VALUES (?, ?, ?)",
+                    (list_id, label, idx),
+                )
+            now = self.db.utc_now()
+            conn.execute("UPDATE tier_lists SET updated_at = ? WHERE id = ?", (now, list_id))
+            self._log(
+                conn, list_obj.guild_id, list_id, actor_id,
+                "tierlist.tiers.edit",
+                {"added": list(set(new_labels) - set(old_labels)), "removed": list(removed), "order": new_labels},
             )
 
     def _log(

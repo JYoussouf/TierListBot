@@ -2,18 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
 
 
-class Tier(str, Enum):
-    S = "S"
-    A = "A"
-    B = "B"
-    C = "C"
-    D = "D"
-
-
-DEFAULT_TIERS = [Tier.S, Tier.A, Tier.B, Tier.C, Tier.D]
+DEFAULT_TIERS: list[str] = ["S", "A", "B", "C", "D"]
 
 
 @dataclass(slots=True)
@@ -26,6 +17,7 @@ class TierList:
     created_at: datetime
     updated_at: datetime
     message_id: str | None = None
+    finished_at: datetime | None = None
 
 
 @dataclass(slots=True)

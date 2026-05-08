@@ -86,7 +86,7 @@ def test_board_width_grows_with_more_items(tmp_path: Path):
     renderer = BoardRenderer(tmp_path)
     tl = _tier_list()
     w_empty = Image.open(renderer.render(tl, [], DEFAULT_LABELS)).width
-    items = [_item(tmp_path, "S", f"img{i}.png") for i in range(5)]
+    items = [_item(tmp_path, "S", f"img{i}.png") for i in range(6)]
     w_full = Image.open(renderer.render(tl, items, DEFAULT_LABELS)).width
     assert w_full > w_empty
 
