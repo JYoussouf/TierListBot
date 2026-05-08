@@ -359,24 +359,6 @@ class TierListCog(commands.Cog):
             return None
         return tier_list
 
-    async def render_and_send(
-        self, interaction: discord.Interaction, list_id: str, ephemeral: bool
-    ) -> None:
-        try:
-            list_obj    = self.service.get_list(list_id)
-            items       = self.service.list_items(list_id)
-            tier_labels = self.service.get_tiers_ordered(list_id)
-        except NotFoundError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
-            return
-
-        output_path = self.renderer.render(list_obj, items, tier_labels)
-        file = discord.File(output_path, filename=f"{list_obj.id}.png")
-        if interaction.response.is_done():
-            await interaction.followup.send(file=file, ephemeral=ephemeral)
-        else:
-            await interaction.response.send_message(file=file, ephemeral=ephemeral)
-
     # ── commands ──────────────────────────────────────────────────────────────
 
     @tierlist.command(name="start", description="Start a new tier list in this channel")
@@ -479,19 +461,32 @@ class TierListCog(commands.Cog):
             ephemeral=True,
         )
 
-    @tierlist.command(name="show", description="Re-post the active tier list board for everyone")
+    @tierlist.command(name="show", description="Bring the board to the bottom of chat")
     async def show(self, interaction: discord.Interaction) -> None:
         tier_list = await self._require_active(interaction)
         if tier_list is None:
             return
-        await self.render_and_send(interaction, tier_list.id, ephemeral=False)
 
-    @tierlist.command(name="render", description="Re-post the active tier list board")
-    async def render(self, interaction: discord.Interaction) -> None:
-        tier_list = await self._require_active(interaction)
-        if tier_list is None:
-            return
-        await self.render_and_send(interaction, tier_list.id, ephemeral=False)
+        await interaction.response.defer(ephemeral=True)
+
+        tier_list   = self.service.get_list(tier_list.id)
+        items       = self.service.list_items(tier_list.id)
+        tier_labels = self.service.get_tiers_ordered(tier_list.id)
+        output_path = self.renderer.render(tier_list, items, tier_labels)
+
+        assert interaction.channel is not None
+        if tier_list.message_id:
+            try:
+                old = interaction.channel.get_partial_message(int(tier_list.message_id))
+                await old.delete()
+            except discord.HTTPException:
+                pass
+
+        new_msg = await interaction.channel.send(
+            file=discord.File(output_path, filename=f"{tier_list.id}.png")
+        )
+        self.service.update_message_id(tier_list.id, str(new_msg.id))
+        await interaction.followup.send("​", ephemeral=True)
 
     @tierlist.command(name="finish", description="Mark the active tier list as complete and free the channel")
     async def finish(self, interaction: discord.Interaction) -> None:
@@ -590,8 +585,7 @@ class TierListCog(commands.Cog):
             name="Managing items",
             value=(
                 "`/tl rearrange` — pick an item and destination tier from dropdowns\n"
-                "`/tl show` — view all item IDs and access rename/relabel buttons\n"
-                "`/tl render` — re-post the board as a fresh image"
+                "`/tl show` — delete the old board and re-post it at the bottom of chat"
             ),
             inline=False,
         )
@@ -687,13 +681,9 @@ class TierListCog(commands.Cog):
     async def tl_move(self, interaction: discord.Interaction) -> None:
         await self.move.callback(self, interaction)
 
-    @tl.command(name="show", description="Show items in the active tier list")
+    @tl.command(name="show", description="Bring the board to the bottom of chat")
     async def tl_show(self, interaction: discord.Interaction) -> None:
         await self.show.callback(self, interaction)
-
-    @tl.command(name="render", description="Re-post the active tier list board")
-    async def tl_render(self, interaction: discord.Interaction) -> None:
-        await self.render.callback(self, interaction)
 
     @tl.command(name="finish", description="Mark the active tier list as complete")
     async def tl_finish(self, interaction: discord.Interaction) -> None:
