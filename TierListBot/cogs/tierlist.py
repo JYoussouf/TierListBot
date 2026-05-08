@@ -598,10 +598,7 @@ class TierListCog(commands.Cog):
         )
         embed.add_field(
             name="Tiers",
-            value=(
-                "`/tl add-tier name:<label>` - add a custom tier row\n"
-                "`/tl edit-tiers` - add, remove, or reorder all tiers at once"
-            ),
+            value="`/tl edit-tiers` - add, remove, or reorder all tiers at once",
             inline=False,
         )
         embed.add_field(
@@ -651,40 +648,6 @@ class TierListCog(commands.Cog):
     @tierlist.command(name="edit-tiers", description="Edit, reorder, add, or remove tiers via a text editor")
     async def tierlist_edit_tiers(self, interaction: discord.Interaction) -> None:
         await self.tl_edit_tiers.callback(self, interaction)
-
-    @tl.command(name="add-tier", description="Add a custom tier to the active list")
-    @app_commands.describe(name="Tier label (e.g. god-tier)")
-    async def tl_add_tier(self, interaction: discord.Interaction, name: str) -> None:
-        tier_list = await self._require_active(interaction)
-        if tier_list is None:
-            return
-
-        try:
-            self.service.add_tier(tier_list.id, interaction.user.id, name)
-        except TierListError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
-            return
-
-        await interaction.response.defer(ephemeral=True)
-
-        tier_labels = self.service.get_tiers_ordered(tier_list.id)
-        items = self.service.list_items(tier_list.id)
-        output_path = self.renderer.render(tier_list, items, tier_labels)
-
-        assert interaction.channel is not None
-        if tier_list.message_id:
-            partial_msg = interaction.channel.get_partial_message(int(tier_list.message_id))
-            try:
-                await partial_msg.edit(attachments=[discord.File(output_path, filename=f"{tier_list.id}.png")])
-            except discord.HTTPException as exc:
-                logger.warning("Failed to edit board message: %s", exc)
-
-        await interaction.delete_original_response()
-
-    @tierlist.command(name="add-tier", description="Add a custom tier to the active list")
-    @app_commands.describe(name="Tier label (e.g. god-tier)")
-    async def tierlist_add_tier(self, interaction: discord.Interaction, name: str) -> None:
-        await self.tl_add_tier.callback(self, interaction, name)
 
     @tl.command(name="rearrange", description="Rearrange an item into a different tier")
     async def tl_move(self, interaction: discord.Interaction) -> None:
