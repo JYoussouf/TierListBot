@@ -566,8 +566,7 @@ class TierListCog(commands.Cog):
         embed.add_field(
             name="Adding images",
             value=(
-                "`/s` `/a` `/b` `/c` `/d` — add an image directly to that tier\n"
-                "`/tl add` — add an image and pick the tier from buttons\n"
+                "`/tl add` — upload an image and pick the tier from buttons\n"
                 "The board edits in place every time."
             ),
             inline=False,
@@ -611,15 +610,6 @@ class TierListCog(commands.Cog):
     ) -> None:
         await self.add.callback(self, interaction, image, label)
 
-    async def _tl_tier_shortcut(
-        self, interaction: discord.Interaction, tier_label: str, image: discord.Attachment
-    ) -> None:
-        shortcuts: commands.Cog | None = self.bot.cogs.get("TierShortcutsCog")  # type: ignore[assignment]
-        if shortcuts is None:
-            await interaction.response.send_message("Internal error: shortcuts cog not loaded.", ephemeral=True)
-            return
-        await shortcuts._add_to_tier(interaction, tier_label, image)  # type: ignore[attr-defined]
-
     @tl.command(name="edit-tiers", description="Edit, reorder, add, or remove tiers via a text editor")
     async def tl_edit_tiers(self, interaction: discord.Interaction) -> None:
         tier_list = await self._require_active(interaction)
@@ -640,41 +630,36 @@ class TierListCog(commands.Cog):
     @tl.command(name="add-tier", description="Add a custom tier to the active list")
     @app_commands.describe(name="Tier label (e.g. god-tier)")
     async def tl_add_tier(self, interaction: discord.Interaction, name: str) -> None:
-        shortcuts: commands.Cog | None = self.bot.cogs.get("TierShortcutsCog")  # type: ignore[assignment]
-        if shortcuts is None:
-            await interaction.response.send_message("Internal error: shortcuts cog not loaded.", ephemeral=True)
+        tier_list = await self._require_active(interaction)
+        if tier_list is None:
             return
-        await shortcuts._add_tier_to_list(interaction, name)  # type: ignore[attr-defined]
+
+        try:
+            self.service.add_tier(tier_list.id, interaction.user.id, name)
+        except TierListError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        tier_labels = self.service.get_tiers_ordered(tier_list.id)
+        items = self.service.list_items(tier_list.id)
+        output_path = self.renderer.render(tier_list, items, tier_labels)
+
+        assert interaction.channel is not None
+        if tier_list.message_id:
+            partial_msg = interaction.channel.get_partial_message(int(tier_list.message_id))
+            try:
+                await partial_msg.edit(attachments=[discord.File(output_path, filename=f"{tier_list.id}.png")])
+            except discord.HTTPException as exc:
+                logger.warning("Failed to edit board message: %s", exc)
+
+        await interaction.delete_original_response()
 
     @tierlist.command(name="add-tier", description="Add a custom tier to the active list")
     @app_commands.describe(name="Tier label (e.g. god-tier)")
     async def tierlist_add_tier(self, interaction: discord.Interaction, name: str) -> None:
         await self.tl_add_tier.callback(self, interaction, name)
-
-    @tl.command(name="s", description="Add image to S tier")
-    @app_commands.describe(image="Image to add")
-    async def tl_s(self, interaction: discord.Interaction, image: discord.Attachment) -> None:
-        await self._tl_tier_shortcut(interaction, "S", image)
-
-    @tl.command(name="a", description="Add image to A tier")
-    @app_commands.describe(image="Image to add")
-    async def tl_a(self, interaction: discord.Interaction, image: discord.Attachment) -> None:
-        await self._tl_tier_shortcut(interaction, "A", image)
-
-    @tl.command(name="b", description="Add image to B tier")
-    @app_commands.describe(image="Image to add")
-    async def tl_b(self, interaction: discord.Interaction, image: discord.Attachment) -> None:
-        await self._tl_tier_shortcut(interaction, "B", image)
-
-    @tl.command(name="c", description="Add image to C tier")
-    @app_commands.describe(image="Image to add")
-    async def tl_c(self, interaction: discord.Interaction, image: discord.Attachment) -> None:
-        await self._tl_tier_shortcut(interaction, "C", image)
-
-    @tl.command(name="d", description="Add image to D tier")
-    @app_commands.describe(image="Image to add")
-    async def tl_d(self, interaction: discord.Interaction, image: discord.Attachment) -> None:
-        await self._tl_tier_shortcut(interaction, "D", image)
 
     @tl.command(name="rearrange", description="Rearrange an item into a different tier")
     async def tl_move(self, interaction: discord.Interaction) -> None:

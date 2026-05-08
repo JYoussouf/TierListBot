@@ -16,8 +16,7 @@ Set `DISCORD_GUILD_ID` for instant guild-scoped command sync during dev. Leave i
 | Command | What it does |
 |---|---|
 | `/tl start name:…` | Start a new list, posts the board |
-| `/s` `/a` `/b` `/c` `/d` | Add an image to that tier |
-| `/tl add` | Add image + pick tier from buttons |
+| `/tl add` | Upload an image and pick the tier from buttons |
 | `/tl add-tier name:…` | Add a custom tier row |
 | `/tl edit-tiers` | Reorder / add / remove all tiers at once |
 | `/tl rearrange` | Move an item to a different tier |
