@@ -17,9 +17,14 @@ logger = logging.getLogger(__name__)
 # ── Modals ────────────────────────────────────────────────────────────────────
 
 
-class EditTiersModal(discord.ui.Modal, title="Edit Tiers"):
+class EditTiersModal(discord.ui.Modal, title="Edit Tier List"):
+    name_input = discord.ui.TextInput(
+        label="Title",
+        min_length=1,
+        max_length=80,
+    )
     tiers_input = discord.ui.TextInput(
-        label="One tier per line - add, remove, reorder",
+        label="Tiers - one per line, add/remove/reorder",
         style=discord.TextStyle.long,
         min_length=1,
         max_length=500,
@@ -30,13 +35,17 @@ class EditTiersModal(discord.ui.Modal, title="Edit Tiers"):
         super().__init__()
         self.cog = cog
         self.tier_list = tier_list
+        self.name_input.default = tier_list.name
         self.tiers_input.default = "\n".join(current_labels)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        new_name = str(self.name_input).strip()
         raw = str(self.tiers_input)
         new_labels = [line.strip() for line in raw.splitlines() if line.strip()]
 
         try:
+            if new_name != self.tier_list.name:
+                self.cog.service.rename_list(self.tier_list.id, interaction.user.id, new_name)
             self.cog.service.set_tiers(self.tier_list.id, interaction.user.id, new_labels)
         except (TierListError, LimitError) as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
