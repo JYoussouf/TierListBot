@@ -119,7 +119,7 @@ def test_render_items_in_custom_tier_renders_thumbnail(tmp_path: Path):
 def test_render_many_custom_tiers_cycles_palette(tmp_path: Path):
     renderer = BoardRenderer(tmp_path)
     tl = _tier_list()
-    # 10 custom tiers exceeds the 6-color custom palette — must cycle without error
+    # 10 custom tiers exceeds the 6-color custom palette - must cycle without error
     custom = [f"custom-{i}" for i in range(10)]
     out = renderer.render(tl, [], DEFAULT_LABELS + custom)
     assert Image.open(out).format == "PNG"
@@ -131,7 +131,7 @@ def test_render_only_custom_tiers_no_defaults(tmp_path: Path):
     out = renderer.render(tl, [], ["god-tier", "trash"])
     img = Image.open(out)
     assert img.format == "PNG"
-    # Only 2 rows — should be shorter than 5-row default board
+    # Only 2 rows - should be shorter than 5-row default board
     h2 = img.height
     h5 = Image.open(renderer.render(tl, [], DEFAULT_LABELS)).height
     assert h2 < h5
@@ -171,6 +171,6 @@ def test_render_item_with_label_does_not_raise(tmp_path: Path):
 def test_render_long_tier_label_truncated_safely(tmp_path: Path):
     renderer = BoardRenderer(tmp_path)
     tl = _tier_list()
-    # Labels longer than 4 chars get truncated in the draw call — must not crash
+    # Labels longer than 4 chars get truncated in the draw call - must not crash
     out = renderer.render(tl, [], ["very-long-tier-name"])
     assert Image.open(out).format == "PNG"

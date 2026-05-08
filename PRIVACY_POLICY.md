@@ -1,4 +1,4 @@
-# TierListBot — Privacy Policy
+# TierListBot - Privacy Policy
 
 _Last updated: 2026-05-08_
 
@@ -8,11 +8,11 @@ _Last updated: 2026-05-08_
 
 TierListBot stores the following data in order to function:
 
-- **Discord server (guild) ID** and **channel ID** — to track which channel a tier list belongs to
-- **Discord user IDs** — to identify who created a list and who added or moved items
-- **Uploaded images** — stored locally on the host server; the original filename, file size, content type, and a SHA-256 hash are also recorded
-- **Tier list names, tier labels, item labels, and tier assignments** — the content of your lists
-- **Audit log** — a record of every action taken on a list (create, add item, move item, edit tiers, finish, delete), including the user ID of who performed it and when
+- **Discord server (guild) ID** and **channel ID** - to track which channel a tier list belongs to
+- **Discord user IDs** - to identify who created a list and who added or moved items
+- **Uploaded images** - stored locally on the host server; the original filename, file size, content type, and a SHA-256 hash are also recorded
+- **Tier list names, tier labels, item labels, and tier assignments** - the content of your lists
+- **Audit log** - a record of every action taken on a list (create, add item, move item, edit tiers, finish, delete), including the user ID of who performed it and when
 
 No message content, usernames, profile pictures, email addresses, or any other personal information is collected.
 
@@ -41,7 +41,7 @@ All data is stored locally on the server running the bot. It is not transmitted 
 
 To have your data removed:
 
-- **Delete a tier list**: use `/tl delete` — this removes all items and images associated with that list immediately
+- **Delete a tier list**: use `/tl delete` - this removes all items and images associated with that list immediately
 - **Request full removal**: open an issue on the project repository and the data will be wiped manually
 
 Deletion is permanent and cannot be undone.

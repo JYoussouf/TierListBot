@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 class EditTiersModal(discord.ui.Modal, title="Edit Tiers"):
     tiers_input = discord.ui.TextInput(
-        label="One tier per line — add, remove, reorder",
+        label="One tier per line - add, remove, reorder",
         style=discord.TextStyle.long,
         min_length=1,
         max_length=500,
@@ -159,7 +159,7 @@ class HistorySelectView(discord.ui.View):
 
 
 class TierSelectView(discord.ui.View):
-    """Shown after /tl add — user picks a tier and the item is placed + board updated."""
+    """Shown after /tl add - user picks a tier and the item is placed + board updated."""
 
     def __init__(
         self,
@@ -243,7 +243,7 @@ class MoveItemView(discord.ui.View):
 
         # ── positional labels: S1, S2, A1, custom-tier1, … ───────────────────
         tier_counter: dict[str, int] = {}
-        self._item_display: dict[str, str] = {}  # item_id → "S1" / "S1 — label"
+        self._item_display: dict[str, str] = {}  # item_id → "S1" / "S1 - label"
         for item in items[:25]:
             n = tier_counter[item.tier] = tier_counter.get(item.tier, 0) + 1
             positional = f"{item.tier}{n}"
@@ -253,7 +253,7 @@ class MoveItemView(discord.ui.View):
         item_opts: list[discord.SelectOption] = []
         for item in items[:25]:
             positional = self._item_display[item.id]
-            label = (f"{positional} — {item.label}" if item.label else positional)[:100]
+            label = (f"{positional} - {item.label}" if item.label else positional)[:100]
             item_opts.append(
                 discord.SelectOption(
                     label=label,
@@ -570,7 +570,7 @@ class TierListCog(commands.Cog):
         for tl in finished:
             finished_str = tl.finished_at.strftime("%Y-%m-%d %H:%M UTC") if tl.finished_at else "?"
             items = self.service.list_items(tl.id)
-            lines.append(f"• **{tl.name}** — {len(items)} items — finished {finished_str}")
+            lines.append(f"• **{tl.name}** - {len(items)} items - finished {finished_str}")
 
         embed = discord.Embed(description="\n".join(lines), color=0x1B2735)
         view = HistorySelectView(self, finished)
@@ -578,20 +578,20 @@ class TierListCog(commands.Cog):
 
     @tierlist.command(name="help", description="Show how to use TierListBot")
     async def help(self, interaction: discord.Interaction) -> None:
-        embed = discord.Embed(title="TierListBot — How to use", color=0x1B2735)
+        embed = discord.Embed(title="TierListBot - How to use", color=0x1B2735)
         embed.add_field(
             name="Start & end",
             value=(
-                "`/tl start name:<name>` — start a tier list and post the live board\n"
-                "`/tl finish` — mark it complete and free the channel for a new one\n"
-                "`/tl delete` — permanently delete the active list (owner or admin only)"
+                "`/tl start name:<name>` - start a tier list and post the live board\n"
+                "`/tl finish` - mark it complete and free the channel for a new one\n"
+                "`/tl delete` - permanently delete the active list (owner or admin only)"
             ),
             inline=False,
         )
         embed.add_field(
             name="Adding images",
             value=(
-                "`/tl add` — upload an image and pick the tier from buttons\n"
+                "`/tl add` - upload an image and pick the tier from buttons\n"
                 "The board edits in place every time."
             ),
             inline=False,
@@ -599,21 +599,21 @@ class TierListCog(commands.Cog):
         embed.add_field(
             name="Tiers",
             value=(
-                "`/tl add-tier name:<label>` — add a custom tier row\n"
-                "`/tl edit-tiers` — add, remove, or reorder all tiers at once"
+                "`/tl add-tier name:<label>` - add a custom tier row\n"
+                "`/tl edit-tiers` - add, remove, or reorder all tiers at once"
             ),
             inline=False,
         )
         embed.add_field(
             name="Managing items",
-            value="`/tl rearrange` — pick an item and a destination tier from dropdowns",
+            value="`/tl rearrange` - pick an item and a destination tier from dropdowns",
             inline=False,
         )
         embed.add_field(
             name="Board",
             value=(
-                "`/tl show` — delete the old board and re-post it at the bottom of chat\n"
-                "`/tl history` — browse and re-render finished lists"
+                "`/tl show` - delete the old board and re-post it at the bottom of chat\n"
+                "`/tl history` - browse and re-render finished lists"
             ),
             inline=False,
         )

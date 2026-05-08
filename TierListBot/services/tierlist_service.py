@@ -12,7 +12,7 @@ from TierListBot.services.db import Database
 from TierListBot.services.image_store import StoredImage
 
 
-# Label rendering constraints — must match renderer.py constants
+# Label rendering constraints - must match renderer.py constants
 LABEL_WRAP_WIDTH = 18
 LABEL_MAX_LINES  = 5
 LABEL_MAX_CHARS  = LABEL_WRAP_WIDTH * LABEL_MAX_LINES  # 90
@@ -329,7 +329,7 @@ class TierListService:
             raise LimitError(
                 f"Tier label is too long ({len(tier_label)} chars). "
                 f"Labels wrap at {LABEL_WRAP_WIDTH} characters per line with a max of "
-                f"{LABEL_MAX_LINES} lines — keep it under {LABEL_MAX_CHARS} characters."
+                f"{LABEL_MAX_LINES} lines - keep it under {LABEL_MAX_CHARS} characters."
             )
         list_obj = self.get_list(list_id)
         with self.db.tx() as conn:

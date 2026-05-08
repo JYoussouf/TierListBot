@@ -1,4 +1,4 @@
-# TierListBot — Terms of Service
+# TierListBot - Terms of Service
 
 _Last updated: 2026-05-08_
 
