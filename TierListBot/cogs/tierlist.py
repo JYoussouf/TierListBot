@@ -272,6 +272,7 @@ class MoveItemView(discord.ui.View):
                     description=f"Currently in {item.tier}"[:100],
                 )
             )
+        item_opts.sort(key=lambda o: o.label.lower())
         self.item_select = discord.ui.Select(
             placeholder="1. Pick an item…",
             options=item_opts,
