@@ -305,7 +305,7 @@ class MoveItemView(discord.ui.View):
         self.add_item(self.delete_btn)
 
         self.done_btn = discord.ui.Button(
-            label="Done", style=discord.ButtonStyle.secondary, row=2
+            label="Update", style=discord.ButtonStyle.secondary, row=2
         )
         self.done_btn.callback = self._on_done
         self.add_item(self.done_btn)
