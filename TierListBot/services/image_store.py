@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
+import logging
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 
 import aiohttp
 from PIL import Image, ImageDraw, ImageFont
+
+logger = logging.getLogger(__name__)
 
 VALID_IMAGE_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"}
 
@@ -25,10 +29,27 @@ class StoredImage:
 
 
 class ImageStore:
-    def __init__(self, base_dir: Path, max_image_bytes: int):
+    def __init__(self, base_dir: Path, max_image_bytes: int, s3_client=None, bucket_name: str | None = None):
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.max_image_bytes = max_image_bytes
+        self._s3 = s3_client
+        self._bucket = bucket_name
+
+    def _upload_to_r2(self, key: str, raw: bytes, content_type: str) -> None:
+        try:
+            self._s3.put_object(Bucket=self._bucket, Key=key, Body=raw, ContentType=content_type)
+        except Exception:
+            logger.exception("R2 upload failed for key %s", key)
+
+    async def upload_to_r2(self, local_path: Path) -> None:
+        if not self._s3 or not self._bucket:
+            return
+        raw = local_path.read_bytes()
+        ext = local_path.suffix.lstrip(".")
+        content_type = f"image/{ext}" if ext else "application/octet-stream"
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._upload_to_r2, local_path.name, raw, content_type)
 
     def validate(self, content_type: str | None, size: int) -> None:
         if size <= 0:

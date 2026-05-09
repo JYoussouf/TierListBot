@@ -694,10 +694,13 @@ class TierListCog(commands.Cog):
             )
             return
 
+        items = self.service.list_items(tier_list.id)
         self.service.finish_list(tier_list.id, interaction.user.id)
         await interaction.response.send_message(
             f"**{tier_list.name}** is finished! Start a new one any time with `/tl start`, or revisit this one with `/tl history`."
         )
+        for item in items:
+            await self.image_store.upload_to_r2(Path(item.image_path))
 
     @tl.command(name="delete-current-list", description="Delete the active tier list")
     async def delete(self, interaction: discord.Interaction) -> None:

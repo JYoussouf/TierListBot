@@ -18,6 +18,10 @@ class Settings:
     max_items_per_list: int
     max_lists_per_guild: int
     log_level: str
+    r2_endpoint_url: str | None
+    r2_access_key_id: str | None
+    r2_secret_access_key: str | None
+    r2_bucket: str | None
 
     @property
     def db_path(self) -> Path:
@@ -57,4 +61,8 @@ def load_settings() -> Settings:
         max_items_per_list=int(os.getenv("MAX_ITEMS_PER_LIST", "100")),
         max_lists_per_guild=int(os.getenv("MAX_LISTS_PER_GUILD", "50")),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
+        r2_endpoint_url=os.getenv("CF_R2_ENDPOINT_URL") or None,
+        r2_access_key_id=os.getenv("CF_R2_ACCESS_KEY_ID") or None,
+        r2_secret_access_key=os.getenv("CF_R2_SECRET_ACCESS_KEY") or None,
+        r2_bucket=os.getenv("CF_R2_BUCKET") or None,
     )
