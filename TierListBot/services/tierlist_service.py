@@ -285,6 +285,28 @@ class TierListService:
             except OSError:
                 pass
 
+    def set_item_order(
+        self, list_id: str, actor_id: int, ordered_pairs: list[tuple[str, str]]
+    ) -> None:
+        """Set tier and position for every item in one transaction. ordered_pairs is [(item_id, tier), ...]."""
+        now = self.db.utc_now()
+        list_obj = self.get_list(list_id)
+        with self.db.tx() as conn:
+            for pos, (item_id, tier) in enumerate(ordered_pairs):
+                conn.execute(
+                    "UPDATE items SET tier = ?, position = ? WHERE id = ? AND list_id = ?",
+                    (tier, pos, item_id, list_id),
+                )
+            conn.execute("UPDATE tier_lists SET updated_at = ? WHERE id = ?", (now, list_id))
+            self._log(
+                conn,
+                list_obj.guild_id,
+                list_id,
+                actor_id,
+                "tierlist.item.bulk_reorder",
+                {"count": len(ordered_pairs)},
+            )
+
     def rename_list(self, list_id: str, actor_id: int, new_name: str) -> TierList:
         now = self.db.utc_now()
         list_obj = self.get_list(list_id)

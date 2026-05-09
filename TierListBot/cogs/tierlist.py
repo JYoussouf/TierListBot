@@ -234,6 +234,108 @@ class TierSelectView(discord.ui.View):
         await interaction.delete_original_response()
 
 
+class MassRearrangeModal(discord.ui.Modal, title="Mass rearrange"):
+    layout = discord.ui.TextInput(
+        label="Edit layout (one tier per line)",
+        style=discord.TextStyle.long,
+        placeholder="S: S1, S2\nA: A1\nC: C1, C2",
+        min_length=1,
+        max_length=2000,
+    )
+
+    def __init__(self, cog: "TierListCog", tier_list: TierList, items: list[TierItem],
+                 tier_labels: list[str], item_display: dict[str, str],
+                 btn_interaction: discord.Interaction):
+        super().__init__()
+        self.cog = cog
+        self.tier_list = tier_list
+        self._items = items
+        self._tier_labels = tier_labels
+        self._item_display = item_display  # item_id → positional label e.g. "S1"
+        self.btn_interaction = btn_interaction
+
+        # Build reverse lookup: positional label (uppercase) → item_id
+        self._label_to_id: dict[str, str] = {v.upper(): k for k, v in item_display.items()}
+
+        # Pre-populate text with current layout
+        by_tier: dict[str, list[str]] = {t: [] for t in tier_labels}
+        for item in items:
+            if item.tier in by_tier:
+                by_tier[item.tier].append(item_display[item.id])
+        lines = [f"{t}: {', '.join(by_tier[t])}" for t in tier_labels]
+        self.layout.default = "\n".join(lines)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        tier_set = set(self._tier_labels)
+        ordered: list[tuple[str, str]] = []  # (item_id, tier) in desired order
+        seen: set[str] = set()
+        errors: list[str] = []
+
+        for raw_line in self.layout.value.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if ":" not in line:
+                errors.append(f"Bad line (missing ':'): {line!r}")
+                continue
+            tier, rest = line.split(":", 1)
+            tier = tier.strip()
+            if tier not in tier_set:
+                errors.append(f"Unknown tier: {tier!r}")
+                continue
+            for token in rest.split(","):
+                lbl = token.strip().split()[0].upper() if token.strip() else ""
+                if not lbl:
+                    continue
+                item_id = self._label_to_id.get(lbl)
+                if item_id is None:
+                    errors.append(f"Unknown label: {lbl}")
+                    continue
+                if item_id in seen:
+                    errors.append(f"Duplicate: {lbl}")
+                    continue
+                seen.add(item_id)
+                ordered.append((item_id, tier))
+
+        if errors:
+            await interaction.response.send_message(
+                "Could not apply - fix these issues:\n" + "\n".join(f"- {e}" for e in errors),
+                ephemeral=True,
+            )
+            return
+
+        # Append any items not mentioned, keeping their current tier
+        for item in self._items:
+            if item.id not in seen:
+                ordered.append((item.id, item.tier))
+
+        try:
+            self.cog.service.set_item_order(self.tier_list.id, interaction.user.id, ordered)
+        except TierListError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+
+        tier_list   = self.cog.service.get_list(self.tier_list.id)
+        items       = self.cog.service.list_items(self.tier_list.id)
+        tier_labels = self.cog.service.get_tiers_ordered(self.tier_list.id)
+        output_path = self.cog.renderer.render(tier_list, items, tier_labels)
+
+        assert interaction.channel is not None
+        if tier_list.message_id:
+            try:
+                await interaction.channel.get_partial_message(int(tier_list.message_id)).delete()
+            except discord.HTTPException:
+                pass
+        new_msg = await interaction.channel.send(
+            file=discord.File(output_path, filename=f"{tier_list.id}.png")
+        )
+        self.cog.service.update_message_id(self.tier_list.id, str(new_msg.id))
+
+        await interaction.response.defer()
+        await self.btn_interaction.edit_original_response(content="​", view=None)
+        await self.btn_interaction.delete_original_response()
+
+
 class TypePositionModal(discord.ui.Modal, title="Pick item by position"):
     position = discord.ui.TextInput(
         label="Position (e.g. S2, A1)",
@@ -357,8 +459,22 @@ class MoveItemView(discord.ui.View):
         self.type_btn.callback = self._on_type
         self.add_item(self.type_btn)
 
+        self.mass_btn = discord.ui.Button(
+            label="Mass edit…", style=discord.ButtonStyle.secondary
+        )
+        self.mass_btn.callback = self._on_mass
+        self.add_item(self.mass_btn)
+
     async def _on_type(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(TypePositionModal(self, interaction))
+
+    async def _on_mass(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(
+            MassRearrangeModal(
+                self.cog, self.tier_list, self._items, self._tier_labels,
+                self._item_display, interaction,
+            )
+        )
 
     def _build_pos_opts(self, tier: str) -> list[discord.SelectOption]:
         opts = [discord.SelectOption(label="End of tier (default)", value="end", default=True)]
@@ -406,16 +522,14 @@ class MoveItemView(discord.ui.View):
         output_path = self.cog.renderer.render(tier_list, items, tier_labels)
         assert interaction.channel is not None
         if tier_list.message_id:
-            partial = interaction.channel.get_partial_message(int(tier_list.message_id))
             try:
-                await partial.edit(
-                    attachments=[discord.File(output_path, filename=f"{tier_list.id}.png")]
-                )
+                await interaction.channel.get_partial_message(int(tier_list.message_id)).delete()
             except discord.HTTPException:
-                new_msg = await interaction.channel.send(
-                    file=discord.File(output_path, filename=f"{tier_list.id}.png")
-                )
-                self.cog.service.update_message_id(self.tier_list.id, str(new_msg.id))
+                pass
+        new_msg = await interaction.channel.send(
+            file=discord.File(output_path, filename=f"{tier_list.id}.png")
+        )
+        self.cog.service.update_message_id(self.tier_list.id, str(new_msg.id))
 
     async def _on_move(self, interaction: discord.Interaction) -> None:
         assert self.selected_item_id and self.selected_tier
