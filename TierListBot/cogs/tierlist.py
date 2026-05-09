@@ -744,42 +744,19 @@ class TierListCog(commands.Cog):
 
     @tl.command(name="help", description="Show how to use TierListBot")
     async def help(self, interaction: discord.Interaction) -> None:
-        embed = discord.Embed(title="TierListBot - How to use", color=0x1B2735)
+        embed = discord.Embed(title="TierListBot", color=0x1B2735)
         embed.add_field(
-            name="Start & end",
+            name="Commands",
             value=(
-                "`/tl start name:<name>` - start a tier list and post the live board\n"
-                "`/tl finish-current-list` - mark it complete and free the channel for a new one\n"
-                "`/tl delete-current-list` - permanently delete the active list (owner or admin only)"
-            ),
-            inline=False,
-        )
-        embed.add_field(
-            name="Adding items",
-            value=(
-                "`/tl add` - upload an image and pick the tier from buttons\n"
-                "`/tl add-text text:<text>` - add a text tile (white text on black square)"
-            ),
-            inline=False,
-        )
-        embed.add_field(
-            name="Tiers",
-            value="`/tl edit-tiers` - add, remove, or reorder all tiers at once",
-            inline=False,
-        )
-        embed.add_field(
-            name="Managing items",
-            value=(
-                "`/tl rearrange` - pick an item, then use ← ↑ ↓ → to move or reorder it.\n"
-                "Click **Update** to apply changes to the board, or **Delete item** to remove it."
-            ),
-            inline=False,
-        )
-        embed.add_field(
-            name="Board",
-            value=(
-                "`/tl show-current-list` - delete the old board and re-post it at the bottom of chat\n"
-                "`/tl history` - browse and re-render finished lists"
+                "`/tl start` - start a new tier list\n"
+                "`/tl add` - add an image to the active list\n"
+                "`/tl add-text` - add a text tile\n"
+                "`/tl edit-tiers` - add, remove, or reorder tiers\n"
+                "`/tl rearrange` - move or delete an item\n"
+                "`/tl show-current-list` - repost the board to the bottom of chat\n"
+                "`/tl finish-current-list` - close the list\n"
+                "`/tl delete-current-list` - permanently delete the list\n"
+                "`/tl history` - browse finished lists"
             ),
             inline=False,
         )
