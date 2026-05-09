@@ -844,9 +844,11 @@ class TierListCog(commands.Cog):
             return
 
         tier_labels = self.service.get_tiers_ordered(tier_list.id)
+        output_path = self.renderer.render(tier_list, items, tier_labels)
         view = MoveItemView(self, tier_list, items, tier_labels)
         await interaction.response.send_message(
             view._status_content(),
+            file=discord.File(output_path, filename="preview.png"),
             view=view,
             ephemeral=True,
         )
