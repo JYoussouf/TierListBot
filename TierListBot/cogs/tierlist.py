@@ -701,7 +701,7 @@ class TierListCog(commands.Cog):
             f"Start a new one any time with `/tl start`."
         )
 
-    @tierlist.command(name="delete", description="Delete the active tier list")
+    @tierlist.command(name="delete-current-list", description="Delete the active tier list")
     async def delete(self, interaction: discord.Interaction) -> None:
         tier_list = await self._require_active(interaction)
         if tier_list is None:
@@ -854,7 +854,7 @@ class TierListCog(commands.Cog):
     async def tl_finish(self, interaction: discord.Interaction) -> None:
         await self.finish.callback(self, interaction)
 
-    @tl.command(name="delete", description="Delete the active tier list")
+    @tl.command(name="delete-current-list", description="Delete the active tier list")
     async def tl_delete(self, interaction: discord.Interaction) -> None:
         await self.delete.callback(self, interaction)
 
