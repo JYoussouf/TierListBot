@@ -245,20 +245,20 @@ class MassRearrangeModal(discord.ui.Modal, title="Mass rearrange"):
 
     def __init__(self, cog: "TierListCog", tier_list: TierList, items: list[TierItem],
                  tier_labels: list[str], item_display: dict[str, str],
-                 btn_interaction: discord.Interaction):
+                 btn_interaction: discord.Interaction, move_view: "MoveItemView"):
         super().__init__()
         self.cog = cog
         self.tier_list = tier_list
         self._items = items
         self._tier_labels = tier_labels
-        self._item_display = item_display  # item_id → positional label e.g. "S1"
+        self._item_display = item_display
         self.btn_interaction = btn_interaction
+        self.move_view = move_view
 
         # Build reverse lookup: positional label (uppercase) → item_id
         self._label_to_id: dict[str, str] = {v.upper(): k for k, v in item_display.items()}
 
         # Pre-populate text with current layout, showing labels in parens for context
-        id_to_item = {i.id: i for i in items}
         by_tier: dict[str, list[str]] = {t: [] for t in tier_labels}
         for item in items:
             if item.tier in by_tier:
@@ -335,8 +335,7 @@ class MassRearrangeModal(discord.ui.Modal, title="Mass rearrange"):
         self.cog.service.update_message_id(self.tier_list.id, str(new_msg.id))
 
         await interaction.response.defer()
-        await self.btn_interaction.edit_original_response(content="​", view=None)
-        await self.btn_interaction.delete_original_response()
+        await self.move_view._reload_view(self.btn_interaction)
 
 
 class TypePositionModal(discord.ui.Modal, title="Pick item by position"):
@@ -477,6 +476,12 @@ class MoveItemView(discord.ui.View):
         self.mass_btn.callback = self._on_mass
         self.add_item(self.mass_btn)
 
+        self.done_btn = discord.ui.Button(
+            label="Done", style=discord.ButtonStyle.secondary, row=3
+        )
+        self.done_btn.callback = self._on_done
+        self.add_item(self.done_btn)
+
         # ── row 4: nudge buttons ──────────────────────────────────────────────
         self.left_btn  = discord.ui.Button(label="←", style=discord.ButtonStyle.secondary, disabled=True, row=4)
         self.up_btn    = discord.ui.Button(label="↑", style=discord.ButtonStyle.secondary, disabled=True, row=4)
@@ -588,13 +593,85 @@ class MoveItemView(discord.ui.View):
                 self.tier_list.id, interaction.user.id, self._working_order
             )
         except TierListError as exc:
-            await interaction.response.edit_message(content=str(exc), view=None)
+            await interaction.response.edit_message(content=str(exc), view=self)
             return
-        await interaction.response.edit_message(content="​", view=None)
+        await interaction.response.defer()
         await self._refresh_board(interaction)
-        await interaction.delete_original_response()
+        await self._reload_view(interaction, keep_selected=self.selected_item_id)
 
     # ── modal / select helpers ────────────────────────────────────────────────
+
+    async def _reload_view(
+        self,
+        edit_interaction: discord.Interaction,
+        keep_selected: str | None = None,
+    ) -> None:
+        """Reload items from DB and rebuild the view in-place (no close)."""
+        fresh_items = self.cog.service.list_items(self.tier_list.id)
+        fresh_tiers = self.cog.service.get_tiers_ordered(self.tier_list.id)
+
+        self._all_items   = fresh_items
+        self._items       = fresh_items[:25]
+        self._tier_labels = fresh_tiers
+
+        tier_counter: dict[str, int] = {}
+        self._item_display = {}
+        for item in self._all_items:
+            n = tier_counter[item.tier] = tier_counter.get(item.tier, 0) + 1
+            self._item_display[item.id] = f"{item.tier}{n}"
+
+        self._working_order = [(item.id, item.tier) for item in self._all_items]
+
+        fresh_ids = {item.id for item in self._all_items}
+        self.selected_item_id  = keep_selected if keep_selected in fresh_ids else None
+        self.selected_before_id = None
+
+        # Rebuild item select
+        if not self._items:
+            await edit_interaction.edit_original_response(
+                content="No items left in this tier list.", view=None
+            )
+            return
+        item_opts = []
+        for item in self._items:
+            pos_lbl = self._item_display[item.id]
+            label = (f"{pos_lbl} - {item.label}" if item.label else pos_lbl)[:100]
+            item_opts.append(discord.SelectOption(
+                label=label,
+                value=item.id,
+                description=f"Currently in {item.tier}"[:100],
+                default=(item.id == self.selected_item_id),
+            ))
+        item_opts.sort(key=lambda o: o.label.lower())
+        self.item_select.options = item_opts
+
+        # Rebuild tier select
+        if self.selected_tier not in fresh_tiers:
+            self.selected_tier = None
+        self.tier_select.options = [
+            discord.SelectOption(label=t, value=t, default=(t == self.selected_tier))
+            for t in fresh_tiers[:25]
+        ]
+
+        # Rebuild pos select
+        if self.selected_tier and self.selected_item_id:
+            self.pos_select.options  = self._build_pos_opts(self.selected_tier)
+            self.pos_select.disabled = False
+        else:
+            self.pos_select.options  = [discord.SelectOption(label="End of tier (default)", value="end")]
+            self.pos_select.disabled = True
+
+        self.move_btn.disabled   = not (self.selected_item_id and self.selected_tier)
+        self.delete_btn.disabled = not self.selected_item_id
+        self._update_arrow_states()
+
+        await edit_interaction.edit_original_response(
+            content=self._status_content(), view=self
+        )
+
+    async def _on_done(self, interaction: discord.Interaction) -> None:
+        await interaction.response.edit_message(content="​", view=None)
+        await interaction.delete_original_response()
 
     async def _on_type(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(TypePositionModal(self, interaction))
@@ -603,7 +680,7 @@ class MoveItemView(discord.ui.View):
         await interaction.response.send_modal(
             MassRearrangeModal(
                 self.cog, self.tier_list, self._all_items, self._tier_labels,
-                self._item_display, interaction,
+                self._item_display, interaction, self,
             )
         )
 
@@ -664,21 +741,22 @@ class MoveItemView(discord.ui.View):
 
     async def _on_move(self, interaction: discord.Interaction) -> None:
         assert self.selected_item_id and self.selected_tier
+        moved_id = self.selected_item_id
         try:
             if self.selected_before_id:
                 self.cog.service.reorder_item(
-                    self.tier_list.id, self.selected_item_id, interaction.user.id, self.selected_before_id
+                    self.tier_list.id, moved_id, interaction.user.id, self.selected_before_id
                 )
             else:
                 self.cog.service.move_item(
-                    self.tier_list.id, self.selected_item_id, interaction.user.id, self.selected_tier
+                    self.tier_list.id, moved_id, interaction.user.id, self.selected_tier
                 )
         except (NotFoundError, TierListError) as exc:
-            await interaction.response.edit_message(content=str(exc), view=None)
+            await interaction.response.edit_message(content=str(exc), view=self)
             return
-        await interaction.response.edit_message(content="​", view=None)
+        await interaction.response.defer()
         await self._refresh_board(interaction)
-        await interaction.delete_original_response()
+        await self._reload_view(interaction, keep_selected=moved_id)
 
     async def _on_delete(self, interaction: discord.Interaction) -> None:
         assert self.selected_item_id
@@ -687,12 +765,11 @@ class MoveItemView(discord.ui.View):
                 self.tier_list.id, self.selected_item_id, interaction.user.id
             )
         except (NotFoundError, TierListError) as exc:
-            await interaction.response.edit_message(content=str(exc), view=None)
+            await interaction.response.edit_message(content=str(exc), view=self)
             return
-        positional = self._item_display.get(self.selected_item_id, self.selected_item_id)
-        await interaction.response.edit_message(content=f"Deleted {positional}.", view=None)
+        await interaction.response.defer()
         await self._refresh_board(interaction)
-        await interaction.delete_original_response()
+        await self._reload_view(interaction, keep_selected=None)
 
 
 # ── Cog ───────────────────────────────────────────────────────────────────────
