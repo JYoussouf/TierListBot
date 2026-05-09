@@ -562,7 +562,7 @@ class TierListCog(commands.Cog):
         if existing:
             await interaction.response.send_message(
                 f"**{existing.name}** is already active in this channel.\n"
-                f"Use `/tl finish` (or `/tl delete-current-list`) to end it before starting a new one.",
+                f"Use `/tl finish-current-list` (or `/tl delete-current-list`) to end it before starting a new one.",
                 ephemeral=True,
             )
             return
@@ -654,7 +654,7 @@ class TierListCog(commands.Cog):
             ephemeral=True,
         )
 
-    @tl.command(name="show", description="Bring the board to the bottom of chat")
+    @tl.command(name="show-current-list", description="Bring the board to the bottom of chat")
     async def show(self, interaction: discord.Interaction) -> None:
         tier_list = await self._require_active(interaction)
         if tier_list is None:
@@ -682,7 +682,7 @@ class TierListCog(commands.Cog):
         self.service.update_message_id(tier_list.id, str(new_msg.id))
         await interaction.delete_original_response()
 
-    @tl.command(name="finish", description="Mark the active tier list as complete and free the channel")
+    @tl.command(name="finish-current-list", description="Mark the active tier list as complete and free the channel")
     async def finish(self, interaction: discord.Interaction) -> None:
         tier_list = await self._require_active(interaction)
         if tier_list is None:
@@ -749,7 +749,7 @@ class TierListCog(commands.Cog):
             name="Start & end",
             value=(
                 "`/tl start name:<name>` - start a tier list and post the live board\n"
-                "`/tl finish` - mark it complete and free the channel for a new one\n"
+                "`/tl finish-current-list` - mark it complete and free the channel for a new one\n"
                 "`/tl delete-current-list` - permanently delete the active list (owner or admin only)"
             ),
             inline=False,
@@ -778,7 +778,7 @@ class TierListCog(commands.Cog):
         embed.add_field(
             name="Board",
             value=(
-                "`/tl show` - delete the old board and re-post it at the bottom of chat\n"
+                "`/tl show-current-list` - delete the old board and re-post it at the bottom of chat\n"
                 "`/tl history` - browse and re-render finished lists"
             ),
             inline=False,

@@ -20,8 +20,8 @@ Set `DISCORD_GUILD_ID` for instant guild-scoped command sync during dev. Leave i
 | `/tl add-text text:…` | Add a text tile (white text on black square) |
 | `/tl edit-tiers` | Add, remove, or reorder all tiers at once |
 | `/tl rearrange` | Pick an item, nudge it with arrows, then click Update to apply or Delete item to remove |
-| `/tl show` | Delete old board and re-post it at the bottom of chat |
-| `/tl finish` | Close the list, frees the channel |
+| `/tl show-current-list` | Delete old board and re-post it at the bottom of chat |
+| `/tl finish-current-list` | Close the list, frees the channel |
 | `/tl delete-current-list` | Permanently delete it |
 | `/tl history` | Re-render past lists |
 
