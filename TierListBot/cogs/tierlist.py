@@ -190,10 +190,21 @@ class TierSelectView(discord.ui.View):
         self.label = label
         self.actor_id = actor_id
 
-        for tier_label in tier_labels[:25]:
-            btn = discord.ui.Button(label=tier_label[:80], style=discord.ButtonStyle.primary)
+        label_btn = discord.ui.Button(
+            label="Add image label (optional)",
+            style=discord.ButtonStyle.secondary,
+            row=0,
+        )
+        label_btn.callback = self._open_label_modal
+        self.add_item(label_btn)
+
+        for i, tier_label in enumerate(tier_labels[:24]):
+            btn = discord.ui.Button(label=tier_label[:80], style=discord.ButtonStyle.primary, row=1 + i // 5)
             btn.callback = self._make_callback(tier_label)
             self.add_item(btn)
+
+    async def _open_label_modal(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(AddLabelModal(self))
 
     def _make_callback(self, tier_label: str):
         async def callback(interaction: discord.Interaction) -> None:
@@ -235,6 +246,26 @@ class TierSelectView(discord.ui.View):
 
         await interaction.response.edit_message(content="​", view=None)
         await interaction.delete_original_response()
+
+
+class AddLabelModal(discord.ui.Modal, title="Add a label"):
+    label_input = discord.ui.TextInput(
+        label="Label (optional)",
+        required=False,
+        max_length=80,
+        placeholder="Leave blank to use no label",
+    )
+
+    def __init__(self, view: "TierSelectView"):
+        super().__init__()
+        self.tier_view = view
+        if view.label:
+            self.label_input.default = view.label
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        self.tier_view.label = str(self.label_input).strip() or None
+        label_display = self.tier_view.label or "_none_"
+        await interaction.response.edit_message(content=f"Label set to **{label_display}** — now pick a tier.")
 
 
 class MoveItemView(discord.ui.View):
@@ -589,12 +620,11 @@ class TierListCog(commands.Cog):
         await interaction.delete_original_response()
 
     @tl.command(name="add", description="Add an image to the active tier list")
-    @app_commands.describe(image="Image attachment", label="Optional label")
+    @app_commands.describe(image="Image attachment")
     async def add(
         self,
         interaction: discord.Interaction,
         image: discord.Attachment,
-        label: str | None = None,
     ) -> None:
         tier_list = await self._require_active(interaction)
         if tier_list is None:
@@ -619,7 +649,7 @@ class TierListCog(commands.Cog):
 
         tier_labels = self.service.get_tiers_ordered(tier_list.id)
         view = TierSelectView(
-            self, tier_list, tier_labels, stored, image.filename, label, interaction.user.id
+            self, tier_list, tier_labels, stored, image.filename, None, interaction.user.id
         )
         embed = discord.Embed(title="Which tier?")
         embed.set_image(url=image.url)
