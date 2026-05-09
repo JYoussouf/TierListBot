@@ -219,16 +219,16 @@ class TierSelectView(discord.ui.View):
 
         assert interaction.channel is not None
         if tier_list.message_id:
-            partial = interaction.channel.get_partial_message(int(tier_list.message_id))
             try:
-                await partial.edit(
-                    attachments=[discord.File(output_path, filename=f"{tier_list.id}.png")]
-                )
+                old = interaction.channel.get_partial_message(int(tier_list.message_id))
+                await old.delete()
             except discord.HTTPException:
-                new_msg = await interaction.channel.send(
-                    file=discord.File(output_path, filename=f"{tier_list.id}.png")
-                )
-                self.cog.service.update_message_id(self.tier_list.id, str(new_msg.id))
+                pass
+
+        new_msg = await interaction.channel.send(
+            file=discord.File(output_path, filename=f"{tier_list.id}.png")
+        )
+        self.cog.service.update_message_id(self.tier_list.id, str(new_msg.id))
 
         await interaction.response.edit_message(content="​", view=None)
         await interaction.delete_original_response()
