@@ -338,48 +338,6 @@ class MassRearrangeModal(discord.ui.Modal, title="Mass rearrange"):
         await self.move_view._reload_view(self.btn_interaction)
 
 
-class TypePositionModal(discord.ui.Modal, title="Pick item by position"):
-    position = discord.ui.TextInput(
-        label="Position (e.g. S2, A1)",
-        placeholder="S2",
-        min_length=1,
-        max_length=10,
-    )
-
-    def __init__(self, view: "MoveItemView", btn_interaction: discord.Interaction):
-        super().__init__()
-        self.move_view = view
-        self.btn_interaction = btn_interaction
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        typed = self.position.value.strip().upper()
-        match = next(
-            (iid for iid, lbl in self.move_view._item_display.items() if lbl.upper() == typed),
-            None,
-        )
-        if match is None:
-            await interaction.response.send_message(
-                f"No item at position **{typed}**. Use labels shown on the board, e.g. S1, A2.",
-                ephemeral=True,
-            )
-            return
-
-        self.move_view.selected_item_id = match
-        for opt in self.move_view.item_select.options:
-            opt.default = opt.value == match
-        if self.move_view.selected_tier:
-            self.move_view.pos_select.options = self.move_view._build_pos_opts(self.move_view.selected_tier)
-            self.move_view.pos_select.disabled = False
-            self.move_view.selected_before_id = None
-        self.move_view.move_btn.disabled  = not (match and self.move_view.selected_tier)
-        self.move_view.delete_btn.disabled = False
-        self.move_view._update_arrow_states()
-
-        await interaction.response.defer()
-        await self.btn_interaction.edit_original_response(
-            content=self.move_view._status_content(), view=self.move_view
-        )
-
 
 class MoveItemView(discord.ui.View):
     """
@@ -463,12 +421,6 @@ class MoveItemView(discord.ui.View):
         )
         self.delete_btn.callback = self._on_delete
         self.add_item(self.delete_btn)
-
-        self.type_btn = discord.ui.Button(
-            label="Type position…", style=discord.ButtonStyle.secondary, row=3
-        )
-        self.type_btn.callback = self._on_type
-        self.add_item(self.type_btn)
 
         self.mass_btn = discord.ui.Button(
             label="Mass edit…", style=discord.ButtonStyle.secondary, row=3
@@ -672,9 +624,6 @@ class MoveItemView(discord.ui.View):
     async def _on_done(self, interaction: discord.Interaction) -> None:
         await interaction.response.edit_message(content="​", view=None)
         await interaction.delete_original_response()
-
-    async def _on_type(self, interaction: discord.Interaction) -> None:
-        await interaction.response.send_modal(TypePositionModal(self, interaction))
 
     async def _on_mass(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(
