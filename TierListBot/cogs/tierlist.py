@@ -235,7 +235,7 @@ class TierSelectView(discord.ui.View):
 
 
 class MoveItemView(discord.ui.View):
-    """Two-select + Move button: pick item → pick tier → confirm."""
+    """Item select → tier select → optional position select → Rearrange/Delete."""
 
     def __init__(
         self,
@@ -247,20 +247,22 @@ class MoveItemView(discord.ui.View):
         super().__init__(timeout=300)
         self.cog = cog
         self.tier_list = tier_list
+        self._items = items[:25]
+        self._tier_labels = tier_labels
         self.selected_item_id: str | None = None
         self.selected_tier: str | None = None
+        self.selected_before_id: str | None = None  # None = append to end
 
-        # ── positional labels: S1, S2, A1, custom-tier1, … ───────────────────
+        # positional labels: S1, S2, A1, …
         tier_counter: dict[str, int] = {}
-        self._item_display: dict[str, str] = {}  # item_id → "S1" / "S1 - label"
-        for item in items[:25]:
+        self._item_display: dict[str, str] = {}
+        for item in self._items:
             n = tier_counter[item.tier] = tier_counter.get(item.tier, 0) + 1
-            positional = f"{item.tier}{n}"
-            self._item_display[item.id] = positional
+            self._item_display[item.id] = f"{item.tier}{n}"
 
         # ── item select ───────────────────────────────────────────────────────
         item_opts: list[discord.SelectOption] = []
-        for item in items[:25]:
+        for item in self._items:
             positional = self._item_display[item.id]
             label = (f"{positional} - {item.label}" if item.label else positional)[:100]
             item_opts.append(
@@ -271,7 +273,7 @@ class MoveItemView(discord.ui.View):
                 )
             )
         self.item_select = discord.ui.Select(
-            placeholder="1. Pick an item to move…",
+            placeholder="1. Pick an item…",
             options=item_opts,
         )
         self.item_select.callback = self._on_item
@@ -280,48 +282,78 @@ class MoveItemView(discord.ui.View):
         # ── tier select ───────────────────────────────────────────────────────
         tier_opts = [discord.SelectOption(label=t, value=t) for t in tier_labels[:25]]
         self.tier_select = discord.ui.Select(
-            placeholder="2. Pick the destination tier…",
+            placeholder="2. Pick destination tier…",
             options=tier_opts,
         )
         self.tier_select.callback = self._on_tier
         self.add_item(self.tier_select)
 
-        # ── confirm button (starts disabled) ──────────────────────────────────
+        # ── position select (populated after tier is chosen) ──────────────────
+        self.pos_select = discord.ui.Select(
+            placeholder="3. Pick position (default: end of tier)…",
+            options=[discord.SelectOption(label="End of tier (default)", value="end")],
+            disabled=True,
+        )
+        self.pos_select.callback = self._on_pos
+        self.add_item(self.pos_select)
+
+        # ── buttons ───────────────────────────────────────────────────────────
         self.move_btn = discord.ui.Button(
             label="Rearrange", style=discord.ButtonStyle.primary, disabled=True
         )
         self.move_btn.callback = self._on_move
         self.add_item(self.move_btn)
 
+        self.delete_btn = discord.ui.Button(
+            label="Delete Item", style=discord.ButtonStyle.danger, disabled=True
+        )
+        self.delete_btn.callback = self._on_delete
+        self.add_item(self.delete_btn)
+
+    def _build_pos_opts(self, tier: str) -> list[discord.SelectOption]:
+        opts = [discord.SelectOption(label="End of tier (default)", value="end", default=True)]
+        for item in self._items:
+            if item.tier == tier and item.id != self.selected_item_id:
+                positional = self._item_display[item.id]
+                label = (f"Before {positional} - {item.label}" if item.label else f"Before {positional}")[:100]
+                opts.append(discord.SelectOption(label=label, value=item.id))
+        return opts[:25]
+
     async def _on_item(self, interaction: discord.Interaction) -> None:
         self.selected_item_id = interaction.data["values"][0]  # type: ignore[index]
         for opt in self.item_select.options:
             opt.default = opt.value == self.selected_item_id
+        # Refresh position opts to exclude newly selected item
+        if self.selected_tier:
+            self.pos_select.options = self._build_pos_opts(self.selected_tier)
+            self.pos_select.disabled = False
+            self.selected_before_id = None
         self.move_btn.disabled = not (self.selected_item_id and self.selected_tier)
+        self.delete_btn.disabled = not self.selected_item_id
         await interaction.response.edit_message(view=self)
 
     async def _on_tier(self, interaction: discord.Interaction) -> None:
         self.selected_tier = interaction.data["values"][0]  # type: ignore[index]
         for opt in self.tier_select.options:
             opt.default = opt.value == self.selected_tier
+        self.selected_before_id = None
+        self.pos_select.options = self._build_pos_opts(self.selected_tier)
+        self.pos_select.disabled = False
         self.move_btn.disabled = not (self.selected_item_id and self.selected_tier)
         await interaction.response.edit_message(view=self)
 
-    async def _on_move(self, interaction: discord.Interaction) -> None:
-        assert self.selected_item_id and self.selected_tier
-        try:
-            item = self.cog.service.move_item(
-                self.tier_list.id, self.selected_item_id, interaction.user.id, self.selected_tier
-            )
-        except (NotFoundError, TierListError) as exc:
-            await interaction.response.edit_message(content=str(exc), view=None)
-            return
+    async def _on_pos(self, interaction: discord.Interaction) -> None:
+        val = interaction.data["values"][0]  # type: ignore[index]
+        self.selected_before_id = None if val == "end" else val
+        for opt in self.pos_select.options:
+            opt.default = opt.value == val
+        await interaction.response.edit_message(view=self)
 
+    async def _refresh_board(self, interaction: discord.Interaction) -> None:
         tier_list   = self.cog.service.get_list(self.tier_list.id)
         items       = self.cog.service.list_items(self.tier_list.id)
         tier_labels = self.cog.service.get_tiers_ordered(self.tier_list.id)
         output_path = self.cog.renderer.render(tier_list, items, tier_labels)
-
         assert interaction.channel is not None
         if tier_list.message_id:
             partial = interaction.channel.get_partial_message(int(tier_list.message_id))
@@ -335,15 +367,36 @@ class MoveItemView(discord.ui.View):
                 )
                 self.cog.service.update_message_id(self.tier_list.id, str(new_msg.id))
 
-        # Recompute positional label from updated item list (tier has changed)
-        tier_counter: dict[str, int] = {}
-        new_positional = item.id
-        for it in items:
-            n = tier_counter[it.tier] = tier_counter.get(it.tier, 0) + 1
-            if it.id == item.id:
-                new_positional = f"{it.tier}{n}"
-                break
+    async def _on_move(self, interaction: discord.Interaction) -> None:
+        assert self.selected_item_id and self.selected_tier
+        try:
+            if self.selected_before_id:
+                self.cog.service.reorder_item(
+                    self.tier_list.id, self.selected_item_id, interaction.user.id, self.selected_before_id
+                )
+            else:
+                self.cog.service.move_item(
+                    self.tier_list.id, self.selected_item_id, interaction.user.id, self.selected_tier
+                )
+        except (NotFoundError, TierListError) as exc:
+            await interaction.response.edit_message(content=str(exc), view=None)
+            return
         await interaction.response.edit_message(content="​", view=None)
+        await self._refresh_board(interaction)
+        await interaction.delete_original_response()
+
+    async def _on_delete(self, interaction: discord.Interaction) -> None:
+        assert self.selected_item_id
+        try:
+            self.cog.service.delete_item(
+                self.tier_list.id, self.selected_item_id, interaction.user.id
+            )
+        except (NotFoundError, TierListError) as exc:
+            await interaction.response.edit_message(content=str(exc), view=None)
+            return
+        positional = self._item_display.get(self.selected_item_id, self.selected_item_id)
+        await interaction.response.edit_message(content=f"Deleted {positional}.", view=None)
+        await self._refresh_board(interaction)
         await interaction.delete_original_response()
 
 

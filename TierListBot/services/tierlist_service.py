@@ -105,7 +105,7 @@ class TierListService:
     def list_items(self, list_id: str) -> list[TierItem]:
         with self.db.tx() as conn:
             rows = conn.execute(
-                "SELECT * FROM items WHERE list_id = ? ORDER BY created_at ASC", (list_id,)
+                "SELECT * FROM items WHERE list_id = ? ORDER BY position ASC", (list_id,)
             ).fetchall()
         result: list[TierItem] = []
         for row in rows:
@@ -142,12 +142,15 @@ class TierListService:
             if item_count >= self.max_items_per_list:
                 raise LimitError(f"List reached max items ({self.max_items_per_list}).")
 
+            max_pos = conn.execute(
+                "SELECT COALESCE(MAX(position), -1) FROM items WHERE list_id = ?", (list_id,)
+            ).fetchone()[0]
             conn.execute(
                 """
-                INSERT INTO items(id, list_id, label, tier, image_path, created_by, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO items(id, list_id, label, tier, image_path, created_by, created_at, position)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (item_id, list_id, label, tier, str(image.path), actor_id, now),
+                (item_id, list_id, label, tier, str(image.path), actor_id, now, max_pos + 1),
             )
             conn.execute(
                 """
@@ -201,7 +204,13 @@ class TierListService:
             ).fetchone()
             if not row:
                 raise NotFoundError("Item not found in this tier list.")
-            conn.execute("UPDATE items SET tier = ? WHERE id = ?", (tier, item_id))
+            max_pos = conn.execute(
+                "SELECT COALESCE(MAX(position), -1) FROM items WHERE list_id = ?", (list_id,)
+            ).fetchone()[0]
+            conn.execute(
+                "UPDATE items SET tier = ?, position = ? WHERE id = ?",
+                (tier, max_pos + 1, item_id),
+            )
             conn.execute("UPDATE tier_lists SET updated_at = ? WHERE id = ?", (now, list_id))
             self._log(
                 conn,
@@ -212,6 +221,69 @@ class TierListService:
                 {"item_id": item_id, "tier": tier},
             )
         return self.get_item(item_id)
+
+    def reorder_item(self, list_id: str, item_id: str, actor_id: int, before_item_id: str) -> TierItem:
+        """Move item_id to appear just before before_item_id (possibly changing its tier)."""
+        now = self.db.utc_now()
+        list_obj = self.get_list(list_id)
+        with self.db.tx() as conn:
+            if not conn.execute(
+                "SELECT id FROM items WHERE id = ? AND list_id = ?", (item_id, list_id)
+            ).fetchone():
+                raise NotFoundError("Item not found in this tier list.")
+            target = conn.execute(
+                "SELECT position, tier FROM items WHERE id = ? AND list_id = ?",
+                (before_item_id, list_id),
+            ).fetchone()
+            if not target:
+                raise NotFoundError("Target item not found in this tier list.")
+            target_pos = target["position"]
+            target_tier = target["tier"]
+            conn.execute(
+                "UPDATE items SET position = position + 1 WHERE list_id = ? AND position >= ? AND id != ?",
+                (list_id, target_pos, item_id),
+            )
+            conn.execute(
+                "UPDATE items SET tier = ?, position = ? WHERE id = ?",
+                (target_tier, target_pos, item_id),
+            )
+            conn.execute("UPDATE tier_lists SET updated_at = ? WHERE id = ?", (now, list_id))
+            self._log(
+                conn,
+                list_obj.guild_id,
+                list_id,
+                actor_id,
+                "tierlist.item.reorder",
+                {"item_id": item_id, "before_item_id": before_item_id, "tier": target_tier},
+            )
+        return self.get_item(item_id)
+
+    def delete_item(self, list_id: str, item_id: str, actor_id: int) -> None:
+        now = self.db.utc_now()
+        list_obj = self.get_list(list_id)
+        with self.db.tx() as conn:
+            row = conn.execute(
+                "SELECT image_path FROM items WHERE id = ? AND list_id = ?", (item_id, list_id)
+            ).fetchone()
+            if not row:
+                raise NotFoundError("Item not found in this tier list.")
+            image_path = row["image_path"]
+            conn.execute("DELETE FROM items WHERE id = ?", (item_id,))
+            conn.execute("UPDATE tier_lists SET updated_at = ? WHERE id = ?", (now, list_id))
+            self._log(
+                conn,
+                list_obj.guild_id,
+                list_id,
+                actor_id,
+                "tierlist.item.delete",
+                {"item_id": item_id},
+            )
+        path = Path(image_path)
+        if path.exists():
+            try:
+                path.unlink()
+            except OSError:
+                pass
 
     def rename_list(self, list_id: str, actor_id: int, new_name: str) -> TierList:
         now = self.db.utc_now()

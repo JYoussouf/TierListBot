@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS items (
     image_path TEXT NOT NULL,
     created_by INTEGER NOT NULL,
     created_at TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY(list_id) REFERENCES tier_lists(id) ON DELETE CASCADE
 );
 
@@ -86,6 +87,21 @@ class Database:
                 pass
             try:
                 self._conn.execute("ALTER TABLE tier_lists ADD COLUMN finished_at TEXT")
+                self._conn.commit()
+            except sqlite3.OperationalError:
+                pass
+            try:
+                self._conn.execute("ALTER TABLE items ADD COLUMN position INTEGER NOT NULL DEFAULT 0")
+                self._conn.commit()
+                # Backfill: assign positions 0, 1, 2... per list ordered by created_at
+                self._conn.executescript("""
+                    CREATE TEMP TABLE _item_pos AS
+                        SELECT id, ROW_NUMBER() OVER (PARTITION BY list_id ORDER BY created_at ASC) - 1 AS pos
+                        FROM items;
+                    UPDATE items SET position = (SELECT pos FROM _item_pos WHERE _item_pos.id = items.id)
+                        WHERE EXISTS (SELECT 1 FROM _item_pos WHERE _item_pos.id = items.id);
+                    DROP TABLE _item_pos;
+                """)
                 self._conn.commit()
             except sqlite3.OperationalError:
                 pass
