@@ -751,7 +751,7 @@ class TierListCog(commands.Cog):
             value=(
                 "`/tl start name:<name>` - start a tier list and post the live board\n"
                 "`/tl finish` - mark it complete and free the channel for a new one\n"
-                "`/tl delete` - permanently delete the active list (owner or admin only)"
+                "`/tl delete-current-list` - permanently delete the active list (owner or admin only)"
             ),
             inline=False,
         )
@@ -759,8 +759,7 @@ class TierListCog(commands.Cog):
             name="Adding items",
             value=(
                 "`/tl add` - upload an image and pick the tier from buttons\n"
-                "`/tl add-text text:<text>` - add a text tile (white text on black square)\n"
-                "The board edits in place every time."
+                "`/tl add-text text:<text>` - add a text tile (white text on black square)"
             ),
             inline=False,
         )
@@ -772,9 +771,8 @@ class TierListCog(commands.Cog):
         embed.add_field(
             name="Managing items",
             value=(
-                "`/tl rearrange` - pick an item, then:\n"
-                "- choose a **destination tier** (and optionally a position within it) to move or reorder\n"
-                "- click **Delete Item** to remove it entirely"
+                "`/tl rearrange` - pick an item, then use ← ↑ ↓ → to move or reorder it.\n"
+                "Click **Update** to apply changes to the board, or **Delete item** to remove it."
             ),
             inline=False,
         )
