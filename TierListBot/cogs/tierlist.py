@@ -65,12 +65,14 @@ class EditTiersModal(discord.ui.Modal, title="Edit Tier List"):
                 await partial.edit(attachments=[discord.File(output_path, filename=f"{tier_list.id}.png")])
             except discord.HTTPException:
                 new_msg = await interaction.channel.send(
-                    file=discord.File(output_path, filename=f"{tier_list.id}.png")
+                    file=discord.File(output_path, filename=f"{tier_list.id}.png"),
+                    silent=True,
                 )
                 self.cog.service.update_message_id(tier_list.id, str(new_msg.id))
         else:
             new_msg = await interaction.channel.send(
-                file=discord.File(output_path, filename=f"{tier_list.id}.png")
+                file=discord.File(output_path, filename=f"{tier_list.id}.png"),
+                silent=True,
             )
             self.cog.service.update_message_id(tier_list.id, str(new_msg.id))
 
@@ -226,7 +228,8 @@ class TierSelectView(discord.ui.View):
                 pass
 
         new_msg = await interaction.channel.send(
-            file=discord.File(output_path, filename=f"{tier_list.id}.png")
+            file=discord.File(output_path, filename=f"{tier_list.id}.png"),
+            silent=True,
         )
         self.cog.service.update_message_id(self.tier_list.id, str(new_msg.id))
 
@@ -475,7 +478,8 @@ class MoveItemView(discord.ui.View):
                 )
             except discord.HTTPException:
                 new_msg = await interaction.channel.send(
-                    file=discord.File(output_path, filename=f"{tier_list.id}.png")
+                    file=discord.File(output_path, filename=f"{tier_list.id}.png"),
+                    silent=True,
                 )
                 self.cog.service.update_message_id(tier_list.id, str(new_msg.id))
 
@@ -578,7 +582,8 @@ class TierListCog(commands.Cog):
         output_path = self.renderer.render(tier_list, [], tier_labels)
         assert interaction.channel is not None
         board_msg = await interaction.channel.send(
-            file=discord.File(output_path, filename=f"{tier_list.id}.png")
+            file=discord.File(output_path, filename=f"{tier_list.id}.png"),
+            silent=True,
         )
         self.service.update_message_id(tier_list.id, str(board_msg.id))
 
@@ -670,7 +675,8 @@ class TierListCog(commands.Cog):
                 pass
 
         new_msg = await interaction.channel.send(
-            file=discord.File(output_path, filename=f"{tier_list.id}.png")
+            file=discord.File(output_path, filename=f"{tier_list.id}.png"),
+            silent=True,
         )
         self.service.update_message_id(tier_list.id, str(new_msg.id))
         await interaction.delete_original_response()
