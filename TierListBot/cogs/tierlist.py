@@ -318,24 +318,8 @@ class MassRearrangeModal(discord.ui.Modal, title="Mass rearrange"):
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
 
-        tier_list   = self.cog.service.get_list(self.tier_list.id)
-        items       = self.cog.service.list_items(self.tier_list.id)
-        tier_labels = self.cog.service.get_tiers_ordered(self.tier_list.id)
-        output_path = self.cog.renderer.render(tier_list, items, tier_labels)
-
-        assert interaction.channel is not None
-        if tier_list.message_id:
-            try:
-                await interaction.channel.get_partial_message(int(tier_list.message_id)).delete()
-            except discord.HTTPException:
-                pass
-        new_msg = await interaction.channel.send(
-            file=discord.File(output_path, filename=f"{tier_list.id}.png")
-        )
-        self.cog.service.update_message_id(self.tier_list.id, str(new_msg.id))
-
         await interaction.response.defer()
-        await self.move_view._reload_view(self.btn_interaction)
+        await self.move_view._show_preview(self.btn_interaction)
 
 
 
@@ -530,8 +514,7 @@ class MoveItemView(discord.ui.View):
             await interaction.response.edit_message(content=str(exc), view=self)
             return
         await interaction.response.defer()
-        await self._refresh_board(interaction)
-        await self._reload_view(interaction, keep_selected=self.selected_item_id)
+        await self._show_preview(interaction, keep_selected=self.selected_item_id)
 
     async def _on_left(self, interaction: discord.Interaction) -> None:
         await self._nudge_and_save(interaction, "left")
@@ -547,14 +530,16 @@ class MoveItemView(discord.ui.View):
 
     # ── modal / select helpers ────────────────────────────────────────────────
 
-    async def _reload_view(
+    async def _show_preview(
         self,
         edit_interaction: discord.Interaction,
         keep_selected: str | None = None,
     ) -> None:
-        """Reload items from DB and rebuild the view in-place (no close)."""
+        """Render the board, show as ephemeral preview, rebuild view state. No channel changes."""
         fresh_items = self.cog.service.list_items(self.tier_list.id)
         fresh_tiers = self.cog.service.get_tiers_ordered(self.tier_list.id)
+        tier_list   = self.cog.service.get_list(self.tier_list.id)
+        output_path = self.cog.renderer.render(tier_list, fresh_items, fresh_tiers)
 
         self._all_items   = fresh_items
         self._items       = fresh_items[:25]
@@ -569,15 +554,15 @@ class MoveItemView(discord.ui.View):
         self._working_order = [(item.id, item.tier) for item in self._all_items]
 
         fresh_ids = {item.id for item in self._all_items}
-        self.selected_item_id  = keep_selected if keep_selected in fresh_ids else None
+        self.selected_item_id   = keep_selected if keep_selected in fresh_ids else None
         self.selected_before_id = None
 
-        # Rebuild item select
         if not self._items:
             await edit_interaction.edit_original_response(
-                content="No items left in this tier list.", view=None
+                content="No items left.", view=None, attachments=[]
             )
             return
+
         item_opts = []
         for item in self._items:
             pos_lbl = self._item_display[item.id]
@@ -591,7 +576,6 @@ class MoveItemView(discord.ui.View):
         item_opts.sort(key=lambda o: o.label.lower())
         self.item_select.options = item_opts
 
-        # Rebuild tier select
         if self.selected_tier not in fresh_tiers:
             self.selected_tier = None
         self.tier_select.options = [
@@ -599,7 +583,6 @@ class MoveItemView(discord.ui.View):
             for t in fresh_tiers[:25]
         ]
 
-        # Rebuild pos select
         if self.selected_tier and self.selected_item_id:
             self.pos_select.options  = self._build_pos_opts(self.selected_tier)
             self.pos_select.disabled = False
@@ -612,11 +595,31 @@ class MoveItemView(discord.ui.View):
         self._update_arrow_states()
 
         await edit_interaction.edit_original_response(
-            content=self._status_content(), view=self
+            content=self._status_content(),
+            attachments=[discord.File(output_path, filename="preview.png")],
+            view=self,
         )
 
     async def _on_done(self, interaction: discord.Interaction) -> None:
-        await interaction.response.edit_message(content="​", view=None)
+        tier_list   = self.cog.service.get_list(self.tier_list.id)
+        items       = self.cog.service.list_items(self.tier_list.id)
+        tier_labels = self.cog.service.get_tiers_ordered(self.tier_list.id)
+        output_path = self.cog.renderer.render(tier_list, items, tier_labels)
+
+        assert interaction.channel is not None
+        if tier_list.message_id:
+            partial = interaction.channel.get_partial_message(int(tier_list.message_id))
+            try:
+                await partial.edit(
+                    attachments=[discord.File(output_path, filename=f"{tier_list.id}.png")]
+                )
+            except discord.HTTPException:
+                new_msg = await interaction.channel.send(
+                    file=discord.File(output_path, filename=f"{tier_list.id}.png")
+                )
+                self.cog.service.update_message_id(tier_list.id, str(new_msg.id))
+
+        await interaction.response.defer()
         await interaction.delete_original_response()
 
     async def _on_mass(self, interaction: discord.Interaction) -> None:
@@ -666,22 +669,6 @@ class MoveItemView(discord.ui.View):
             opt.default = opt.value == val
         await interaction.response.edit_message(view=self)
 
-    async def _refresh_board(self, interaction: discord.Interaction) -> None:
-        tier_list   = self.cog.service.get_list(self.tier_list.id)
-        items       = self.cog.service.list_items(self.tier_list.id)
-        tier_labels = self.cog.service.get_tiers_ordered(self.tier_list.id)
-        output_path = self.cog.renderer.render(tier_list, items, tier_labels)
-        assert interaction.channel is not None
-        if tier_list.message_id:
-            try:
-                await interaction.channel.get_partial_message(int(tier_list.message_id)).delete()
-            except discord.HTTPException:
-                pass
-        new_msg = await interaction.channel.send(
-            file=discord.File(output_path, filename=f"{tier_list.id}.png")
-        )
-        self.cog.service.update_message_id(self.tier_list.id, str(new_msg.id))
-
     async def _on_move(self, interaction: discord.Interaction) -> None:
         assert self.selected_item_id and self.selected_tier
         moved_id = self.selected_item_id
@@ -698,8 +685,7 @@ class MoveItemView(discord.ui.View):
             await interaction.response.edit_message(content=str(exc), view=self)
             return
         await interaction.response.defer()
-        await self._refresh_board(interaction)
-        await self._reload_view(interaction, keep_selected=moved_id)
+        await self._show_preview(interaction, keep_selected=moved_id)
 
     async def _on_delete(self, interaction: discord.Interaction) -> None:
         assert self.selected_item_id
@@ -711,8 +697,7 @@ class MoveItemView(discord.ui.View):
             await interaction.response.edit_message(content=str(exc), view=self)
             return
         await interaction.response.defer()
-        await self._refresh_board(interaction)
-        await self._reload_view(interaction, keep_selected=None)
+        await self._show_preview(interaction, keep_selected=None)
 
 
 # ── Cog ───────────────────────────────────────────────────────────────────────
