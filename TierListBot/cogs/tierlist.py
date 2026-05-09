@@ -111,7 +111,7 @@ class HistoryDeleteView(discord.ui.View):
 
     @discord.ui.button(label="Keep", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(content="Kept.", view=None)
+        await interaction.response.edit_message(view=None)
 
     @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
