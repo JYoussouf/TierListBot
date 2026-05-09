@@ -746,16 +746,32 @@ class TierListCog(commands.Cog):
     async def help(self, interaction: discord.Interaction) -> None:
         embed = discord.Embed(title="TierListBot", color=0x1B2735)
         embed.add_field(
-            name="Commands",
+            name="List",
             value=(
                 "`/tl start` - start a new tier list\n"
-                "`/tl add` - add an image to the active list\n"
-                "`/tl add-text` - add a text tile\n"
-                "`/tl edit-tiers` - add, remove, or reorder tiers\n"
-                "`/tl rearrange` - move or delete an item\n"
-                "`/tl show-current-list` - repost the board to the bottom of chat\n"
                 "`/tl finish-current-list` - close the list\n"
-                "`/tl delete-current-list` - permanently delete the list\n"
+                "`/tl delete-current-list` - permanently delete the list"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Items",
+            value=(
+                "`/tl add` - add an image\n"
+                "`/tl add-text` - add a text tile\n"
+                "`/tl rearrange` - move or delete an item"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Tiers",
+            value="`/tl edit-tiers` - add, remove, or reorder tiers",
+            inline=False,
+        )
+        embed.add_field(
+            name="Board",
+            value=(
+                "`/tl show-current-list` - repost the board to the bottom of chat\n"
                 "`/tl history` - browse finished lists"
             ),
             inline=False,
