@@ -109,6 +109,10 @@ class HistoryDeleteView(discord.ui.View):
         self.list_id = list_id
         self.name = name
 
+    @discord.ui.button(label="Keep", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(content="Kept.", view=None)
+
     @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         try:
@@ -118,10 +122,6 @@ class HistoryDeleteView(discord.ui.View):
         await interaction.response.edit_message(
             content=f"**{self.name}** deleted.", view=None
         )
-
-    @discord.ui.button(label="Keep", style=discord.ButtonStyle.secondary)
-    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(content="Kept.", view=None)
 
 
 class HistorySelectView(discord.ui.View):
