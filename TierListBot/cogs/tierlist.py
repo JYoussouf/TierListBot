@@ -622,7 +622,9 @@ class TierListCog(commands.Cog):
         view = TierSelectView(
             self, tier_list, tier_labels, stored, image.filename, label, interaction.user.id
         )
-        await interaction.followup.send("Which tier?", view=view, ephemeral=True)
+        embed = discord.Embed(title="Which tier?")
+        embed.set_image(url=image.url)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
     @tierlist.command(name="rearrange", description="Rearrange an item into a different tier")
     async def move(self, interaction: discord.Interaction) -> None:
