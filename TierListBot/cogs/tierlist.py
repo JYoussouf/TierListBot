@@ -666,7 +666,11 @@ class TierListCog(commands.Cog):
         )
         embed.add_field(
             name="Managing items",
-            value="`/tl rearrange` - pick an item and a destination tier from dropdowns",
+            value=(
+                "`/tl rearrange` - pick an item, then:\n"
+                "- choose a **destination tier** (and optionally a position within it) to move or reorder\n"
+                "- click **Delete Item** to remove it entirely"
+            ),
             inline=False,
         )
         embed.add_field(
