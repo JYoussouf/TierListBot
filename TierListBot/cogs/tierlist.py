@@ -299,7 +299,7 @@ class MoveItemView(discord.ui.View):
 
         # ── row 2: delete / done ──────────────────────────────────────────────
         self.delete_btn = discord.ui.Button(
-            label="Delete", style=discord.ButtonStyle.danger, disabled=True, row=2
+            label="Delete item", style=discord.ButtonStyle.danger, disabled=True, row=2
         )
         self.delete_btn.callback = self._on_delete
         self.add_item(self.delete_btn)

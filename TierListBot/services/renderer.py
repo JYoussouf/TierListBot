@@ -108,6 +108,7 @@ class BoardRenderer:
     def __init__(self, output_dir: Path):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self._thumb_cache: dict[tuple[str, int], Image.Image] = {}
 
     def render(self, tier_list: TierList, items: list[TierItem], tier_labels: list[str]) -> Path:
         grouped: dict[str, list[TierItem]] = defaultdict(list)
@@ -162,19 +163,23 @@ class BoardRenderer:
                 x += _CELL_W
 
         out_path = self.output_dir / f"render-{tier_list.id}.png"
-        image.save(out_path, format="PNG")
+        image.save(out_path, format="PNG", compress_level=1)
         return out_path
 
     def _load_thumbnail(self, path: Path, size: int) -> Image.Image:
+        key = (str(path), size)
+        if key in self._thumb_cache:
+            return self._thumb_cache[key]
         try:
             img = Image.open(path).convert("RGB")
             img.thumbnail((size, size))
             canvas = Image.new("RGB", (size, size), color=_THUMB_BG)
             canvas.paste(img, ((size - img.width) // 2, (size - img.height) // 2))
-            return canvas
+            self._thumb_cache[key] = canvas
         except (FileNotFoundError, UnidentifiedImageError, OSError):
             placeholder = Image.new("RGB", (size, size), color=_THUMB_BG)
             draw = ImageDraw.Draw(placeholder)
             draw.line([(0, 0), (size, size)], fill=(70, 70, 70), width=2)
             draw.line([(size, 0), (0, size)], fill=(70, 70, 70), width=2)
-            return placeholder
+            self._thumb_cache[key] = placeholder
+        return self._thumb_cache[key]
