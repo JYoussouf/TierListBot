@@ -439,13 +439,11 @@ class MoveItemView(discord.ui.View):
         self.up_btn    = discord.ui.Button(label="↑", style=discord.ButtonStyle.secondary, disabled=True, row=4)
         self.down_btn  = discord.ui.Button(label="↓", style=discord.ButtonStyle.secondary, disabled=True, row=4)
         self.right_btn = discord.ui.Button(label="→", style=discord.ButtonStyle.secondary, disabled=True, row=4)
-        self.apply_btn = discord.ui.Button(label="Apply nudge", style=discord.ButtonStyle.success, disabled=True, row=4)
         self.left_btn.callback  = self._on_left
         self.up_btn.callback    = self._on_up
         self.down_btn.callback  = self._on_down
         self.right_btn.callback = self._on_right
-        self.apply_btn.callback = self._on_apply_nudge
-        for btn in (self.left_btn, self.up_btn, self.down_btn, self.right_btn, self.apply_btn):
+        for btn in (self.left_btn, self.up_btn, self.down_btn, self.right_btn):
             self.add_item(btn)
 
     # ── nudge helpers ─────────────────────────────────────────────────────────
@@ -489,7 +487,7 @@ class MoveItemView(discord.ui.View):
 
     def _update_arrow_states(self) -> None:
         if not self.selected_item_id:
-            for btn in (self.left_btn, self.right_btn, self.up_btn, self.down_btn, self.apply_btn):
+            for btn in (self.left_btn, self.right_btn, self.up_btn, self.down_btn):
                 btn.disabled = True
             return
         cur_tier   = self._working_tier()
@@ -500,14 +498,13 @@ class MoveItemView(discord.ui.View):
         self.right_btn.disabled = pos == len(tier_items) - 1
         self.up_btn.disabled    = tier_idx == 0
         self.down_btn.disabled  = tier_idx == len(self._tier_labels) - 1
-        self.apply_btn.disabled = False
 
     def _status_content(self) -> str:
         if not self.selected_item_id:
             return (
                 "Pick an item, then:\n"
                 "- Use **tier / position selects** + **Rearrange** to move it\n"
-                "- Use **← ↑ ↓ →** to nudge one step at a time, then **Apply nudge** to save"
+                "- Use **← ↑ ↓ →** to nudge one step at a time (saves immediately)"
             )
         cur_tier   = self._working_tier()
         tier_items = self._tier_item_ids(cur_tier)
@@ -518,28 +515,13 @@ class MoveItemView(discord.ui.View):
         name_part  = f" ({item.label})" if item and item.label else ""
         return (
             f"**{disp}**{name_part} — tier **{cur_tier}**, position {pos}/{total}\n"
-            "↑/↓ change tier · ←/→ reorder within tier · **Apply nudge** to save"
+            "↑/↓ change tier · ←/→ reorder within tier (saves immediately)"
         )
 
     # ── nudge callbacks ───────────────────────────────────────────────────────
 
-    async def _on_left(self, interaction: discord.Interaction) -> None:
-        self._do_nudge("left");  self._update_arrow_states()
-        await interaction.response.edit_message(content=self._status_content(), view=self)
-
-    async def _on_right(self, interaction: discord.Interaction) -> None:
-        self._do_nudge("right"); self._update_arrow_states()
-        await interaction.response.edit_message(content=self._status_content(), view=self)
-
-    async def _on_up(self, interaction: discord.Interaction) -> None:
-        self._do_nudge("up");    self._update_arrow_states()
-        await interaction.response.edit_message(content=self._status_content(), view=self)
-
-    async def _on_down(self, interaction: discord.Interaction) -> None:
-        self._do_nudge("down");  self._update_arrow_states()
-        await interaction.response.edit_message(content=self._status_content(), view=self)
-
-    async def _on_apply_nudge(self, interaction: discord.Interaction) -> None:
+    async def _nudge_and_save(self, interaction: discord.Interaction, direction: str) -> None:
+        self._do_nudge(direction)
         try:
             self.cog.service.set_item_order(
                 self.tier_list.id, interaction.user.id, self._working_order
@@ -550,6 +532,18 @@ class MoveItemView(discord.ui.View):
         await interaction.response.defer()
         await self._refresh_board(interaction)
         await self._reload_view(interaction, keep_selected=self.selected_item_id)
+
+    async def _on_left(self, interaction: discord.Interaction) -> None:
+        await self._nudge_and_save(interaction, "left")
+
+    async def _on_right(self, interaction: discord.Interaction) -> None:
+        await self._nudge_and_save(interaction, "right")
+
+    async def _on_up(self, interaction: discord.Interaction) -> None:
+        await self._nudge_and_save(interaction, "up")
+
+    async def _on_down(self, interaction: discord.Interaction) -> None:
+        await self._nudge_and_save(interaction, "down")
 
     # ── modal / select helpers ────────────────────────────────────────────────
 
