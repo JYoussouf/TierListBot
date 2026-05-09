@@ -25,7 +25,6 @@ Set `DISCORD_GUILD_ID` for instant guild-scoped command sync during dev. Leave i
 | `/tl delete-current-list` | Permanently delete it |
 | `/tl history` | Re-render past lists |
 
-`/tl` and `/tierlist` are interchangeable.
 
 ## Tests
 

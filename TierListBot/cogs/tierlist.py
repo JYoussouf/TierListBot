@@ -503,8 +503,7 @@ class MoveItemView(discord.ui.View):
 
 
 class TierListCog(commands.Cog):
-    tierlist = app_commands.Group(name="tierlist", description="Manage tier lists")
-    tl       = app_commands.Group(name="tl",       description="Shortcut for /tierlist")
+    tl = app_commands.Group(name="tl", description="Manage tier lists")
 
     def __init__(
         self,
@@ -550,7 +549,7 @@ class TierListCog(commands.Cog):
 
     # ── commands ──────────────────────────────────────────────────────────────
 
-    @tierlist.command(name="start", description="Start a new tier list in this channel")
+    @tl.command(name="start", description="Start a new tier list in this channel")
     @app_commands.describe(name="Display name for this tier list")
     async def create(self, interaction: discord.Interaction, name: str) -> None:
         if interaction.guild is None or interaction.channel_id is None:
@@ -563,7 +562,7 @@ class TierListCog(commands.Cog):
         if existing:
             await interaction.response.send_message(
                 f"**{existing.name}** is already active in this channel.\n"
-                f"Use `/tierlist finish` (or `/tierlist delete`) to end it before starting a new one.",
+                f"Use `/tl finish` (or `/tl delete-current-list`) to end it before starting a new one.",
                 ephemeral=True,
             )
             return
@@ -589,7 +588,7 @@ class TierListCog(commands.Cog):
 
         await interaction.delete_original_response()
 
-    @tierlist.command(name="add", description="Add an image to the active tier list")
+    @tl.command(name="add", description="Add an image to the active tier list")
     @app_commands.describe(image="Image attachment", label="Optional label")
     async def add(
         self,
@@ -626,7 +625,7 @@ class TierListCog(commands.Cog):
         embed.set_image(url=image.url)
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
-    @tierlist.command(name="rearrange", description="Rearrange an item into a different tier")
+    @tl.command(name="rearrange", description="Rearrange an item into a different tier")
     async def move(self, interaction: discord.Interaction) -> None:
         tier_list = await self._require_active(interaction)
         if tier_list is None:
@@ -655,7 +654,7 @@ class TierListCog(commands.Cog):
             ephemeral=True,
         )
 
-    @tierlist.command(name="show", description="Bring the board to the bottom of chat")
+    @tl.command(name="show", description="Bring the board to the bottom of chat")
     async def show(self, interaction: discord.Interaction) -> None:
         tier_list = await self._require_active(interaction)
         if tier_list is None:
@@ -683,7 +682,7 @@ class TierListCog(commands.Cog):
         self.service.update_message_id(tier_list.id, str(new_msg.id))
         await interaction.delete_original_response()
 
-    @tierlist.command(name="finish", description="Mark the active tier list as complete and free the channel")
+    @tl.command(name="finish", description="Mark the active tier list as complete and free the channel")
     async def finish(self, interaction: discord.Interaction) -> None:
         tier_list = await self._require_active(interaction)
         if tier_list is None:
@@ -701,7 +700,7 @@ class TierListCog(commands.Cog):
             f"Start a new one any time with `/tl start`."
         )
 
-    @tierlist.command(name="delete-current-list", description="Delete the active tier list")
+    @tl.command(name="delete-current-list", description="Delete the active tier list")
     async def delete(self, interaction: discord.Interaction) -> None:
         tier_list = await self._require_active(interaction)
         if tier_list is None:
@@ -718,7 +717,7 @@ class TierListCog(commands.Cog):
             f"Delete **{tier_list.name}**? This cannot be undone.", view=view, ephemeral=True
         )
 
-    @tierlist.command(name="history", description="Browse finished tier lists in this channel")
+    @tl.command(name="history", description="Browse finished tier lists in this channel")
     async def history(self, interaction: discord.Interaction) -> None:
         if interaction.channel_id is None:
             await interaction.response.send_message(
@@ -743,7 +742,7 @@ class TierListCog(commands.Cog):
         view = HistorySelectView(self, finished)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-    @tierlist.command(name="help", description="Show how to use TierListBot")
+    @tl.command(name="help", description="Show how to use TierListBot")
     async def help(self, interaction: discord.Interaction) -> None:
         embed = discord.Embed(title="TierListBot - How to use", color=0x1B2735)
         embed.add_field(
@@ -784,23 +783,9 @@ class TierListCog(commands.Cog):
             ),
             inline=False,
         )
-        embed.set_footer(text="/tl and /tierlist are interchangeable. One active list per channel.")
+        embed.set_footer(text="One active list per channel.")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-
-    # ── /tl shortcuts (mirror every /tierlist subcommand) ────────────────────
-
-    @tl.command(name="start", description="Start a new tier list in this channel")
-    @app_commands.describe(name="Display name for this tier list")
-    async def tl_create(self, interaction: discord.Interaction, name: str) -> None:
-        await self.create.callback(self, interaction, name)
-
-    @tl.command(name="add", description="Add an image to the active tier list")
-    @app_commands.describe(image="Image attachment", label="Optional label")
-    async def tl_add(
-        self, interaction: discord.Interaction, image: discord.Attachment, label: str | None = None
-    ) -> None:
-        await self.add.callback(self, interaction, image, label)
 
     @tl.command(name="add-text", description="Add a text entry to the active tier list")
     @app_commands.describe(text="Text to display on the tile")
@@ -831,38 +816,6 @@ class TierListCog(commands.Cog):
         labels = self.service.get_tiers_ordered(tier_list.id)
         await interaction.response.send_modal(EditTiersModal(self, tier_list, labels))
 
-    @tierlist.command(name="add-text", description="Add a text entry to the active tier list")
-    @app_commands.describe(text="Text to display on the tile")
-    async def tierlist_add_text(self, interaction: discord.Interaction, text: str) -> None:
-        await self.tl_add_text.callback(self, interaction, text)
-
-    @tierlist.command(name="edit-tiers", description="Edit, reorder, add, or remove tiers via a text editor")
-    async def tierlist_edit_tiers(self, interaction: discord.Interaction) -> None:
-        await self.tl_edit_tiers.callback(self, interaction)
-
-    @tl.command(name="rearrange", description="Rearrange an item into a different tier")
-    async def tl_move(self, interaction: discord.Interaction) -> None:
-        await self.move.callback(self, interaction)
-
-    @tl.command(name="show", description="Bring the board to the bottom of chat")
-    async def tl_show(self, interaction: discord.Interaction) -> None:
-        await self.show.callback(self, interaction)
-
-    @tl.command(name="finish", description="Mark the active tier list as complete")
-    async def tl_finish(self, interaction: discord.Interaction) -> None:
-        await self.finish.callback(self, interaction)
-
-    @tl.command(name="delete-current-list", description="Delete the active tier list")
-    async def tl_delete(self, interaction: discord.Interaction) -> None:
-        await self.delete.callback(self, interaction)
-
-    @tl.command(name="history", description="Browse finished tier lists in this channel")
-    async def tl_history(self, interaction: discord.Interaction) -> None:
-        await self.history.callback(self, interaction)
-
-    @tl.command(name="help", description="Show how to use TierListBot")
-    async def tl_help(self, interaction: discord.Interaction) -> None:
-        await self.help.callback(self, interaction)
 
 
 async def setup(bot: commands.Bot) -> None:
