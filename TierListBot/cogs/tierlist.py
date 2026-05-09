@@ -234,6 +234,46 @@ class TierSelectView(discord.ui.View):
         await interaction.delete_original_response()
 
 
+class TypePositionModal(discord.ui.Modal, title="Pick item by position"):
+    position = discord.ui.TextInput(
+        label="Position (e.g. S2, A1)",
+        placeholder="S2",
+        min_length=1,
+        max_length=10,
+    )
+
+    def __init__(self, view: "MoveItemView", btn_interaction: discord.Interaction):
+        super().__init__()
+        self.move_view = view
+        self.btn_interaction = btn_interaction
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        typed = self.position.value.strip().upper()
+        match = next(
+            (iid for iid, lbl in self.move_view._item_display.items() if lbl.upper() == typed),
+            None,
+        )
+        if match is None:
+            await interaction.response.send_message(
+                f"No item at position **{typed}**. Use labels shown on the board, e.g. S1, A2.",
+                ephemeral=True,
+            )
+            return
+
+        self.move_view.selected_item_id = match
+        for opt in self.move_view.item_select.options:
+            opt.default = opt.value == match
+        if self.move_view.selected_tier:
+            self.move_view.pos_select.options = self.move_view._build_pos_opts(self.move_view.selected_tier)
+            self.move_view.pos_select.disabled = False
+            self.move_view.selected_before_id = None
+        self.move_view.move_btn.disabled = not (match and self.move_view.selected_tier)
+        self.move_view.delete_btn.disabled = False
+
+        await interaction.response.defer()
+        await self.btn_interaction.edit_original_response(view=self.move_view)
+
+
 class MoveItemView(discord.ui.View):
     """Item select → tier select → optional position select → Rearrange/Delete."""
 
@@ -310,6 +350,15 @@ class MoveItemView(discord.ui.View):
         )
         self.delete_btn.callback = self._on_delete
         self.add_item(self.delete_btn)
+
+        self.type_btn = discord.ui.Button(
+            label="Type position…", style=discord.ButtonStyle.secondary
+        )
+        self.type_btn.callback = self._on_type
+        self.add_item(self.type_btn)
+
+    async def _on_type(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(TypePositionModal(self, interaction))
 
     def _build_pos_opts(self, tier: str) -> list[discord.SelectOption]:
         opts = [discord.SelectOption(label="End of tier (default)", value="end", default=True)]
