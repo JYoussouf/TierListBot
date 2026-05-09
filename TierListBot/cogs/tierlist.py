@@ -257,11 +257,14 @@ class MassRearrangeModal(discord.ui.Modal, title="Mass rearrange"):
         # Build reverse lookup: positional label (uppercase) → item_id
         self._label_to_id: dict[str, str] = {v.upper(): k for k, v in item_display.items()}
 
-        # Pre-populate text with current layout
+        # Pre-populate text with current layout, showing labels in parens for context
+        id_to_item = {i.id: i for i in items}
         by_tier: dict[str, list[str]] = {t: [] for t in tier_labels}
         for item in items:
             if item.tier in by_tier:
-                by_tier[item.tier].append(item_display[item.id])
+                lbl = item_display[item.id]
+                token = f"{lbl} ({item.label})" if item.label else lbl
+                by_tier[item.tier].append(token)
         lines = [f"{t}: {', '.join(by_tier[t])}" for t in tier_labels]
         self.layout.default = "\n".join(lines)
 
@@ -369,15 +372,22 @@ class TypePositionModal(discord.ui.Modal, title="Pick item by position"):
             self.move_view.pos_select.options = self.move_view._build_pos_opts(self.move_view.selected_tier)
             self.move_view.pos_select.disabled = False
             self.move_view.selected_before_id = None
-        self.move_view.move_btn.disabled = not (match and self.move_view.selected_tier)
+        self.move_view.move_btn.disabled  = not (match and self.move_view.selected_tier)
         self.move_view.delete_btn.disabled = False
+        self.move_view._update_arrow_states()
 
         await interaction.response.defer()
-        await self.btn_interaction.edit_original_response(view=self.move_view)
+        await self.btn_interaction.edit_original_response(
+            content=self.move_view._status_content(), view=self.move_view
+        )
 
 
 class MoveItemView(discord.ui.View):
-    """Item select → tier select → optional position select → Rearrange/Delete."""
+    """
+    Row 0: item select   Row 1: tier select   Row 2: position select
+    Row 3: Rearrange / Delete / Type / Mass-edit
+    Row 4: ← ↑ ↓ → / Apply nudge  (fast, no board repost until Apply)
+    """
 
     def __init__(
         self,
@@ -389,81 +399,202 @@ class MoveItemView(discord.ui.View):
         super().__init__(timeout=300)
         self.cog = cog
         self.tier_list = tier_list
-        self._items = items[:25]
+        self._all_items = items          # full list used by nudge / mass-edit
+        self._items = items[:25]         # first 25 for dropdowns
         self._tier_labels = tier_labels
         self.selected_item_id: str | None = None
         self.selected_tier: str | None = None
-        self.selected_before_id: str | None = None  # None = append to end
+        self.selected_before_id: str | None = None
 
-        # positional labels: S1, S2, A1, …
+        # Positional labels for every item (S1, A2, …)
         tier_counter: dict[str, int] = {}
         self._item_display: dict[str, str] = {}
-        for item in self._items:
+        for item in self._all_items:
             n = tier_counter[item.tier] = tier_counter.get(item.tier, 0) + 1
             self._item_display[item.id] = f"{item.tier}{n}"
 
-        # ── item select ───────────────────────────────────────────────────────
+        # In-memory working order for nudge (committed only on Apply)
+        self._working_order: list[tuple[str, str]] = [
+            (item.id, item.tier) for item in self._all_items
+        ]
+
+        # ── row 0: item select ────────────────────────────────────────────────
         item_opts: list[discord.SelectOption] = []
         for item in self._items:
-            positional = self._item_display[item.id]
-            label = (f"{positional} - {item.label}" if item.label else positional)[:100]
-            item_opts.append(
-                discord.SelectOption(
-                    label=label,
-                    value=item.id,
-                    description=f"Currently in {item.tier}"[:100],
-                )
-            )
+            pos_lbl = self._item_display[item.id]
+            label = (f"{pos_lbl} - {item.label}" if item.label else pos_lbl)[:100]
+            item_opts.append(discord.SelectOption(
+                label=label, value=item.id, description=f"Currently in {item.tier}"[:100]
+            ))
         item_opts.sort(key=lambda o: o.label.lower())
         self.item_select = discord.ui.Select(
-            placeholder="1. Pick an item…",
-            options=item_opts,
+            placeholder="1. Pick an item…", options=item_opts, row=0
         )
         self.item_select.callback = self._on_item
         self.add_item(self.item_select)
 
-        # ── tier select ───────────────────────────────────────────────────────
-        tier_opts = [discord.SelectOption(label=t, value=t) for t in tier_labels[:25]]
+        # ── row 1: tier select ────────────────────────────────────────────────
         self.tier_select = discord.ui.Select(
             placeholder="2. Pick destination tier…",
-            options=tier_opts,
+            options=[discord.SelectOption(label=t, value=t) for t in tier_labels[:25]],
+            row=1,
         )
         self.tier_select.callback = self._on_tier
         self.add_item(self.tier_select)
 
-        # ── position select (populated after tier is chosen) ──────────────────
+        # ── row 2: position select ────────────────────────────────────────────
         self.pos_select = discord.ui.Select(
             placeholder="3. Pick position (default: end of tier)…",
             options=[discord.SelectOption(label="End of tier (default)", value="end")],
             disabled=True,
+            row=2,
         )
         self.pos_select.callback = self._on_pos
         self.add_item(self.pos_select)
 
-        # ── buttons ───────────────────────────────────────────────────────────
+        # ── row 3: action buttons ─────────────────────────────────────────────
         self.move_btn = discord.ui.Button(
-            label="Rearrange", style=discord.ButtonStyle.primary, disabled=True
+            label="Rearrange", style=discord.ButtonStyle.primary, disabled=True, row=3
         )
         self.move_btn.callback = self._on_move
         self.add_item(self.move_btn)
 
         self.delete_btn = discord.ui.Button(
-            label="Delete Item", style=discord.ButtonStyle.danger, disabled=True
+            label="Delete", style=discord.ButtonStyle.danger, disabled=True, row=3
         )
         self.delete_btn.callback = self._on_delete
         self.add_item(self.delete_btn)
 
         self.type_btn = discord.ui.Button(
-            label="Type position…", style=discord.ButtonStyle.secondary
+            label="Type position…", style=discord.ButtonStyle.secondary, row=3
         )
         self.type_btn.callback = self._on_type
         self.add_item(self.type_btn)
 
         self.mass_btn = discord.ui.Button(
-            label="Mass edit…", style=discord.ButtonStyle.secondary
+            label="Mass edit…", style=discord.ButtonStyle.secondary, row=3
         )
         self.mass_btn.callback = self._on_mass
         self.add_item(self.mass_btn)
+
+        # ── row 4: nudge buttons ──────────────────────────────────────────────
+        self.left_btn  = discord.ui.Button(label="←", style=discord.ButtonStyle.secondary, disabled=True, row=4)
+        self.up_btn    = discord.ui.Button(label="↑", style=discord.ButtonStyle.secondary, disabled=True, row=4)
+        self.down_btn  = discord.ui.Button(label="↓", style=discord.ButtonStyle.secondary, disabled=True, row=4)
+        self.right_btn = discord.ui.Button(label="→", style=discord.ButtonStyle.secondary, disabled=True, row=4)
+        self.apply_btn = discord.ui.Button(label="Apply nudge", style=discord.ButtonStyle.success, disabled=True, row=4)
+        self.left_btn.callback  = self._on_left
+        self.up_btn.callback    = self._on_up
+        self.down_btn.callback  = self._on_down
+        self.right_btn.callback = self._on_right
+        self.apply_btn.callback = self._on_apply_nudge
+        for btn in (self.left_btn, self.up_btn, self.down_btn, self.right_btn, self.apply_btn):
+            self.add_item(btn)
+
+    # ── nudge helpers ─────────────────────────────────────────────────────────
+
+    def _working_tier(self) -> str:
+        return next(t for iid, t in self._working_order if iid == self.selected_item_id)
+
+    def _tier_item_ids(self, tier: str) -> list[str]:
+        return [iid for iid, t in self._working_order if t == tier]
+
+    def _rebuild_working_order(self, by_tier: dict[str, list[str]]) -> None:
+        self._working_order = [
+            (iid, tier)
+            for tier in self._tier_labels
+            for iid in by_tier.get(tier, [])
+        ]
+
+    def _do_nudge(self, direction: str) -> None:
+        if not self.selected_item_id:
+            return
+        by_tier = {t: self._tier_item_ids(t) for t in self._tier_labels}
+        cur_tier = self._working_tier()
+        pos = by_tier[cur_tier].index(self.selected_item_id)
+        tier_idx = self._tier_labels.index(cur_tier)
+
+        if direction == "left" and pos > 0:
+            lst = by_tier[cur_tier]
+            lst[pos], lst[pos - 1] = lst[pos - 1], lst[pos]
+        elif direction == "right" and pos < len(by_tier[cur_tier]) - 1:
+            lst = by_tier[cur_tier]
+            lst[pos], lst[pos + 1] = lst[pos + 1], lst[pos]
+        elif direction == "up" and tier_idx > 0:
+            new_tier = self._tier_labels[tier_idx - 1]
+            by_tier[cur_tier].remove(self.selected_item_id)
+            by_tier[new_tier].insert(min(pos, len(by_tier[new_tier])), self.selected_item_id)
+        elif direction == "down" and tier_idx < len(self._tier_labels) - 1:
+            new_tier = self._tier_labels[tier_idx + 1]
+            by_tier[cur_tier].remove(self.selected_item_id)
+            by_tier[new_tier].insert(min(pos, len(by_tier[new_tier])), self.selected_item_id)
+        self._rebuild_working_order(by_tier)
+
+    def _update_arrow_states(self) -> None:
+        if not self.selected_item_id:
+            for btn in (self.left_btn, self.right_btn, self.up_btn, self.down_btn, self.apply_btn):
+                btn.disabled = True
+            return
+        cur_tier   = self._working_tier()
+        tier_items = self._tier_item_ids(cur_tier)
+        pos        = tier_items.index(self.selected_item_id)
+        tier_idx   = self._tier_labels.index(cur_tier)
+        self.left_btn.disabled  = pos == 0
+        self.right_btn.disabled = pos == len(tier_items) - 1
+        self.up_btn.disabled    = tier_idx == 0
+        self.down_btn.disabled  = tier_idx == len(self._tier_labels) - 1
+        self.apply_btn.disabled = False
+
+    def _status_content(self) -> str:
+        if not self.selected_item_id:
+            return (
+                "Pick an item, then:\n"
+                "- Use **tier / position selects** + **Rearrange** to move it\n"
+                "- Use **← ↑ ↓ →** to nudge one step at a time, then **Apply nudge** to save"
+            )
+        cur_tier   = self._working_tier()
+        tier_items = self._tier_item_ids(cur_tier)
+        pos        = tier_items.index(self.selected_item_id) + 1
+        total      = len(tier_items)
+        disp       = self._item_display[self.selected_item_id]
+        item       = next((i for i in self._all_items if i.id == self.selected_item_id), None)
+        name_part  = f" ({item.label})" if item and item.label else ""
+        return (
+            f"**{disp}**{name_part} — tier **{cur_tier}**, position {pos}/{total}\n"
+            "↑/↓ change tier · ←/→ reorder within tier · **Apply nudge** to save"
+        )
+
+    # ── nudge callbacks ───────────────────────────────────────────────────────
+
+    async def _on_left(self, interaction: discord.Interaction) -> None:
+        self._do_nudge("left");  self._update_arrow_states()
+        await interaction.response.edit_message(content=self._status_content(), view=self)
+
+    async def _on_right(self, interaction: discord.Interaction) -> None:
+        self._do_nudge("right"); self._update_arrow_states()
+        await interaction.response.edit_message(content=self._status_content(), view=self)
+
+    async def _on_up(self, interaction: discord.Interaction) -> None:
+        self._do_nudge("up");    self._update_arrow_states()
+        await interaction.response.edit_message(content=self._status_content(), view=self)
+
+    async def _on_down(self, interaction: discord.Interaction) -> None:
+        self._do_nudge("down");  self._update_arrow_states()
+        await interaction.response.edit_message(content=self._status_content(), view=self)
+
+    async def _on_apply_nudge(self, interaction: discord.Interaction) -> None:
+        try:
+            self.cog.service.set_item_order(
+                self.tier_list.id, interaction.user.id, self._working_order
+            )
+        except TierListError as exc:
+            await interaction.response.edit_message(content=str(exc), view=None)
+            return
+        await interaction.response.edit_message(content="​", view=None)
+        await self._refresh_board(interaction)
+        await interaction.delete_original_response()
+
+    # ── modal / select helpers ────────────────────────────────────────────────
 
     async def _on_type(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(TypePositionModal(self, interaction))
@@ -471,17 +602,17 @@ class MoveItemView(discord.ui.View):
     async def _on_mass(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(
             MassRearrangeModal(
-                self.cog, self.tier_list, self._items, self._tier_labels,
+                self.cog, self.tier_list, self._all_items, self._tier_labels,
                 self._item_display, interaction,
             )
         )
 
     def _build_pos_opts(self, tier: str) -> list[discord.SelectOption]:
         opts = [discord.SelectOption(label="End of tier (default)", value="end", default=True)]
-        for item in self._items:
+        for item in self._all_items:
             if item.tier == tier and item.id != self.selected_item_id:
-                positional = self._item_display[item.id]
-                label = (f"Before {positional} - {item.label}" if item.label else f"Before {positional}")[:100]
+                pos_lbl = self._item_display[item.id]
+                label = (f"Before {pos_lbl} - {item.label}" if item.label else f"Before {pos_lbl}")[:100]
                 opts.append(discord.SelectOption(label=label, value=item.id))
         return opts[:25]
 
@@ -489,14 +620,14 @@ class MoveItemView(discord.ui.View):
         self.selected_item_id = interaction.data["values"][0]  # type: ignore[index]
         for opt in self.item_select.options:
             opt.default = opt.value == self.selected_item_id
-        # Refresh position opts to exclude newly selected item
         if self.selected_tier:
             self.pos_select.options = self._build_pos_opts(self.selected_tier)
             self.pos_select.disabled = False
             self.selected_before_id = None
-        self.move_btn.disabled = not (self.selected_item_id and self.selected_tier)
+        self.move_btn.disabled  = not (self.selected_item_id and self.selected_tier)
         self.delete_btn.disabled = not self.selected_item_id
-        await interaction.response.edit_message(view=self)
+        self._update_arrow_states()
+        await interaction.response.edit_message(content=self._status_content(), view=self)
 
     async def _on_tier(self, interaction: discord.Interaction) -> None:
         self.selected_tier = interaction.data["values"][0]  # type: ignore[index]
@@ -506,7 +637,7 @@ class MoveItemView(discord.ui.View):
         self.pos_select.options = self._build_pos_opts(self.selected_tier)
         self.pos_select.disabled = False
         self.move_btn.disabled = not (self.selected_item_id and self.selected_tier)
-        await interaction.response.edit_message(view=self)
+        await interaction.response.edit_message(content=self._status_content(), view=self)
 
     async def _on_pos(self, interaction: discord.Interaction) -> None:
         val = interaction.data["values"][0]  # type: ignore[index]
@@ -710,7 +841,7 @@ class TierListCog(commands.Cog):
         tier_labels = self.service.get_tiers_ordered(tier_list.id)
         view = MoveItemView(self, tier_list, items, tier_labels)
         await interaction.response.send_message(
-            "Pick an item and a destination tier, then click **Move**.",
+            view._status_content(),
             view=view,
             ephemeral=True,
         )
