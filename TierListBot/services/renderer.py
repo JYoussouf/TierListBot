@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import textwrap
 from collections import defaultdict
 from pathlib import Path
@@ -48,6 +49,7 @@ _CELL_W    = 114              # square thumbnail cell
 _THUMB_PAD = 5                # padding around each thumbnail inside its cell
 _ROW_GAP   = 1               # 1 px divider between rows
 _MIN_COLS  = 5               # minimum empty columns shown on the board
+_MAX_COLS  = 8               # wrap to a new sub-row after this many items
 
 
 def _label_font(draw: ImageDraw.ImageDraw, text: str, max_px: int) -> ImageFont.ImageFont:
@@ -116,9 +118,15 @@ class BoardRenderer:
             grouped[item.tier].append(item)
 
         max_cols = max((len(grouped[t]) for t in tier_labels), default=0)
-        cols     = max(max_cols, _MIN_COLS)
+        cols     = min(max(max_cols, _MIN_COLS), _MAX_COLS)
         board_w  = _LABEL_W + cols * _CELL_W
-        board_h  = _HEADER_H + len(tier_labels) * (_ROW_H + _ROW_GAP)
+
+        def tier_sub_rows(label: str) -> int:
+            return max(1, math.ceil(len(grouped[label]) / cols))
+
+        board_h = _HEADER_H + sum(
+            tier_sub_rows(t) * _ROW_H + _ROW_GAP for t in tier_labels
+        )
 
         image = Image.new("RGB", (board_w, board_h), color=_BG)
         draw  = ImageDraw.Draw(image)
@@ -130,37 +138,43 @@ class BoardRenderer:
 
         # ── tier rows ─────────────────────────────────────────────────────────
         custom_idx = 0
-        for i, tier_label in enumerate(tier_labels):
+        ry = _HEADER_H
+        for tier_idx, tier_label in enumerate(tier_labels):
             color = _DEFAULT_TIER_COLORS.get(tier_label)
             if color is None:
                 color = _CUSTOM_PALETTE[custom_idx % len(_CUSTOM_PALETTE)]
                 custom_idx += 1
 
-            ry = _HEADER_H + i * (_ROW_H + _ROW_GAP)
+            n_sub_rows = tier_sub_rows(tier_label)
+            tier_h = n_sub_rows * _ROW_H
 
             # content-area background
-            draw.rectangle([(0, ry), (board_w, ry + _ROW_H)], fill=_ROW_BG)
+            draw.rectangle([(0, ry), (board_w, ry + tier_h)], fill=_ROW_BG)
 
-            # 1 px divider above each row (except the first)
-            if i > 0:
+            # 1 px divider above each tier (except the first)
+            if tier_idx > 0:
                 draw.line([(0, ry), (board_w, ry)], fill=_DIVIDER)
 
-            # coloured label cell
-            draw.rectangle([(0, ry), (_LABEL_W, ry + _ROW_H)], fill=color)
-            _draw_tier_label(draw, tier_label, 0, ry, _LABEL_W, _ROW_H, _LABEL_TEXT)
+            # coloured label cell spanning full tier height
+            draw.rectangle([(0, ry), (_LABEL_W, ry + tier_h)], fill=color)
+            _draw_tier_label(draw, tier_label, 0, ry, _LABEL_W, tier_h, _LABEL_TEXT)
 
-            # thumbnails
-            x = _LABEL_W
+            # thumbnails — wrap every `cols` items onto a new sub-row
             thumb_size = _CELL_W - _THUMB_PAD * 2
-            for item in grouped[tier_label]:
+            for idx, item in enumerate(grouped[tier_label]):
+                sub_row = idx // cols
+                sub_col = idx % cols
+                ix = _LABEL_W + sub_col * _CELL_W
+                iy = ry + sub_row * _ROW_H
                 thumb = self._load_thumbnail(Path(item.image_path), thumb_size)
-                image.paste(thumb, (x + _THUMB_PAD, ry + _THUMB_PAD))
+                image.paste(thumb, (ix + _THUMB_PAD, iy + _THUMB_PAD))
                 if item.label:
-                    tag_y = ry + _ROW_H - 20
-                    draw.rectangle([(x, tag_y), (x + _CELL_W, ry + _ROW_H)], fill=_ITEM_TAG)
+                    tag_y = iy + _ROW_H - 20
+                    draw.rectangle([(ix, tag_y), (ix + _CELL_W, iy + _ROW_H)], fill=_ITEM_TAG)
                     tag_font = ImageFont.load_default(size=11)
-                    draw.text((x + 4, tag_y + 3), item.label[:16], fill=_WHITE, font=tag_font)
-                x += _CELL_W
+                    draw.text((ix + 4, tag_y + 3), item.label[:16], fill=_WHITE, font=tag_font)
+
+            ry += tier_h + _ROW_GAP
 
         out_path = self.output_dir / f"render-{tier_list.id}.png"
         image.save(out_path, format="PNG", compress_level=1)
