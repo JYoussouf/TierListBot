@@ -15,16 +15,16 @@ Set `DISCORD_GUILD_ID` for instant guild-scoped command sync during dev. Leave i
 
 | Command | What it does |
 |---|---|
-| `/tl start name:…` | Start a new list, posts the board |
+| `/tl start` | Start a new list, posts the board |
 | `/tl add` | Upload an image and pick the tier from buttons |
-| `/tl add-text text:…` | Add a text tile (white text on black square) |
+| `/tl add-text` | Add a text tile (white text on black square) |
 | `/tl edit-tiers` | Add, remove, or reorder all tiers at once |
 | `/tl rearrange` | Pick an item, nudge it with arrows, then click Update to apply or Delete item to remove |
-| `/tl show-current-list` | Delete old board and re-post it at the bottom of chat |
+| `/tl show-current-list` | Repost the board to the bottom of chat |
 | `/tl finish-current-list` | Close the list, frees the channel |
 | `/tl delete-current-list` | Permanently delete it |
-| `/tl history` | Re-render past lists |
-
+| `/tl history` | Browse and re-render finished lists |
+| `/tl help` | Show command reference in Discord |
 
 ## Tests
 
