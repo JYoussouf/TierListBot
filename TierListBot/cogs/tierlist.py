@@ -696,8 +696,7 @@ class TierListCog(commands.Cog):
 
         self.service.finish_list(tier_list.id, interaction.user.id)
         await interaction.response.send_message(
-            f"**{tier_list.name}** is finished! The board stays in chat as the final result.\n"
-            f"Start a new one any time with `/tl start`."
+            f"**{tier_list.name}** is finished! Start a new one any time with `/tl start`, or revisit this one with `/tl history`."
         )
 
     @tl.command(name="delete-current-list", description="Delete the active tier list")
