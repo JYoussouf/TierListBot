@@ -664,12 +664,6 @@ class TierListCog(commands.Cog):
         if tier_list is None:
             return
 
-        if not await self._can_edit(interaction, tier_list.id):
-            await interaction.response.send_message(
-                "Only the list creator or a server admin can move items.", ephemeral=True
-            )
-            return
-
         items = self.service.list_items(tier_list.id)
         if not items:
             await interaction.response.send_message(
@@ -827,7 +821,7 @@ class TierListCog(commands.Cog):
         stored = self.image_store.save_text_image(text)
         tier_labels = self.service.get_tiers_ordered(tier_list.id)
         view = TierSelectView(
-            self, tier_list, tier_labels, stored, None, None, interaction.user.id,
+            self, tier_list, tier_labels, stored, None, text, interaction.user.id,
             show_label_btn=False,
         )
         await interaction.followup.send("Which tier?", view=view, ephemeral=True)

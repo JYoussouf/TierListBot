@@ -168,7 +168,8 @@ class BoardRenderer:
                 iy = ry + sub_row * _ROW_H
                 thumb = self._load_thumbnail(Path(item.image_path), thumb_size)
                 image.paste(thumb, (ix + _THUMB_PAD, iy + _THUMB_PAD))
-                if item.label:
+                is_text_tile = Path(item.image_path).name.startswith("text_")
+                if item.label and not is_text_tile:
                     tag_y = iy + _ROW_H - 20
                     draw.rectangle([(ix, tag_y), (ix + _CELL_W, iy + _ROW_H)], fill=_ITEM_TAG)
                     tag_font = ImageFont.load_default(size=11)

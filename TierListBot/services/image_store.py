@@ -121,7 +121,7 @@ class ImageStore:
         raw = buf.getvalue()
 
         digest = hashlib.sha256(raw).hexdigest()
-        out_path = self.base_dir / f"{digest}.png"
+        out_path = self.base_dir / f"text_{digest}.png"
         if not out_path.exists():
             out_path.write_bytes(raw)
 
