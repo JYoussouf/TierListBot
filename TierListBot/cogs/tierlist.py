@@ -715,12 +715,6 @@ class TierListCog(commands.Cog):
         if tier_list is None:
             return
 
-        if not await self._can_edit(interaction, tier_list.id):
-            await interaction.response.send_message(
-                "Only the list creator or a server admin can finish this list.", ephemeral=True
-            )
-            return
-
         items = self.service.list_items(tier_list.id)
         self.service.finish_list(tier_list.id, interaction.user.id)
         await interaction.response.send_message(
