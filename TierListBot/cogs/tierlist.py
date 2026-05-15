@@ -182,6 +182,7 @@ class TierSelectView(discord.ui.View):
         original_filename: str | None,
         label: str | None,
         actor_id: int,
+        show_label_btn: bool = True,
     ):
         super().__init__(timeout=300)
         self.cog = cog
@@ -191,13 +192,14 @@ class TierSelectView(discord.ui.View):
         self.label = label
         self.actor_id = actor_id
 
-        label_btn = discord.ui.Button(
-            label="Add image label (optional)",
-            style=discord.ButtonStyle.secondary,
-            row=0,
-        )
-        label_btn.callback = self._open_label_modal
-        self.add_item(label_btn)
+        if show_label_btn:
+            label_btn = discord.ui.Button(
+                label="Add image label (optional)",
+                style=discord.ButtonStyle.secondary,
+                row=0,
+            )
+            label_btn.callback = self._open_label_modal
+            self.add_item(label_btn)
 
         for i, tier_label in enumerate(tier_labels[:24]):
             btn = discord.ui.Button(label=tier_label[:80], style=discord.ButtonStyle.primary, row=1 + i // 5)
@@ -825,7 +827,8 @@ class TierListCog(commands.Cog):
         stored = self.image_store.save_text_image(text)
         tier_labels = self.service.get_tiers_ordered(tier_list.id)
         view = TierSelectView(
-            self, tier_list, tier_labels, stored, None, text[:40], interaction.user.id
+            self, tier_list, tier_labels, stored, None, None, interaction.user.id,
+            show_label_btn=False,
         )
         await interaction.followup.send("Which tier?", view=view, ephemeral=True)
 
