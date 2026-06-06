@@ -8,7 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from TierListBot.models import TierItem, TierList
-from TierListBot.services.image_store import ImageStore, ImageValidationError
+from TierListBot.services.image_store import ImageStore, ImageValidationError, StoredImage
 from TierListBot.services.tierlist_service import LimitError, NotFoundError, TierListError, TierListService
 
 logger = logging.getLogger(__name__)
@@ -183,6 +183,9 @@ class TierSelectView(discord.ui.View):
         label: str | None,
         actor_id: int,
         show_label_btn: bool = True,
+        pending_images: list[tuple[StoredImage, str | None, str]] | None = None,
+        image_position: int = 1,
+        total_images: int = 1,
     ):
         super().__init__(timeout=300)
         self.cog = cog
@@ -191,6 +194,9 @@ class TierSelectView(discord.ui.View):
         self.original_filename = original_filename
         self.label = label
         self.actor_id = actor_id
+        self.pending_images = pending_images or []
+        self.image_position = image_position
+        self.total_images = total_images
 
         if show_label_btn:
             label_btn = discord.ui.Button(
@@ -246,6 +252,27 @@ class TierSelectView(discord.ui.View):
             silent=True,
         )
         self.cog.service.update_message_id(self.tier_list.id, str(new_msg.id))
+
+        if self.pending_images:
+            next_stored, next_filename, next_url = self.pending_images[0]
+            next_view = TierSelectView(
+                self.cog,
+                self.tier_list,
+                tier_labels,
+                next_stored,
+                next_filename,
+                None,
+                self.actor_id,
+                pending_images=self.pending_images[1:],
+                image_position=self.image_position + 1,
+                total_images=self.total_images,
+            )
+            next_embed = discord.Embed(
+                title=self.cog._add_prompt_title(next_view.image_position, next_view.total_images)
+            )
+            next_embed.set_image(url=next_url)
+            await interaction.response.edit_message(content="​", embed=next_embed, view=next_view)
+            return
 
         await interaction.response.edit_message(content="​", view=None)
         await interaction.delete_original_response()
@@ -566,6 +593,12 @@ class TierListCog(commands.Cog):
     def _no_active_list(self) -> str:
         return "No active tier list in this channel. Start one with `/tl start`."
 
+    @staticmethod
+    def _add_prompt_title(image_position: int, total_images: int) -> str:
+        if total_images <= 1:
+            return "Which tier?"
+        return f"Which tier? (image {image_position} of {total_images})"
+
     async def _require_active(
         self, interaction: discord.Interaction
     ) -> TierList | None:
@@ -623,11 +656,31 @@ class TierListCog(commands.Cog):
         await interaction.delete_original_response()
 
     @tl.command(name="add", description="Add an image to the active tier list")
-    @app_commands.describe(image="Image attachment")
+    @app_commands.describe(
+        image="Image attachment",
+        image_2="Optional image attachment",
+        image_3="Optional image attachment",
+        image_4="Optional image attachment",
+        image_5="Optional image attachment",
+        image_6="Optional image attachment",
+        image_7="Optional image attachment",
+        image_8="Optional image attachment",
+        image_9="Optional image attachment",
+        image_10="Optional image attachment",
+    )
     async def add(
         self,
         interaction: discord.Interaction,
         image: discord.Attachment,
+        image_2: discord.Attachment | None = None,
+        image_3: discord.Attachment | None = None,
+        image_4: discord.Attachment | None = None,
+        image_5: discord.Attachment | None = None,
+        image_6: discord.Attachment | None = None,
+        image_7: discord.Attachment | None = None,
+        image_8: discord.Attachment | None = None,
+        image_9: discord.Attachment | None = None,
+        image_10: discord.Attachment | None = None,
     ) -> None:
         tier_list = await self._require_active(interaction)
         if tier_list is None:
@@ -641,21 +694,44 @@ class TierListCog(commands.Cog):
 
         await interaction.response.defer(ephemeral=True)
 
-        try:
-            suffix = Path(image.filename).suffix.lstrip(".") or "png"
-            stored = await self.image_store.save_from_url(
-                self.http_session, image.url, suffix, image.content_type, image.size
-            )
-        except ImageValidationError as exc:
-            await interaction.followup.send(str(exc), ephemeral=True)
-            return
+        images = [
+            attached
+            for attached in (image, image_2, image_3, image_4, image_5, image_6, image_7, image_8, image_9, image_10)
+            if attached is not None
+        ]
+        total_images = len(images)
+
+        saved_images: list[tuple[StoredImage, str | None, str]] = []
+        for idx, attached in enumerate(images, start=1):
+            try:
+                suffix = Path(attached.filename).suffix.lstrip(".") or "png"
+                stored = await self.image_store.save_from_url(
+                    self.http_session, attached.url, suffix, attached.content_type, attached.size
+                )
+            except ImageValidationError as exc:
+                message = str(exc)
+                if total_images > 1:
+                    message = f"{message} (image {idx} of {total_images})"
+                await interaction.followup.send(message, ephemeral=True)
+                return
+            saved_images.append((stored, attached.filename, attached.url))
 
         tier_labels = self.service.get_tiers_ordered(tier_list.id)
+        first_stored, first_filename, first_url = saved_images[0]
         view = TierSelectView(
-            self, tier_list, tier_labels, stored, image.filename, None, interaction.user.id
+            self,
+            tier_list,
+            tier_labels,
+            first_stored,
+            first_filename,
+            None,
+            interaction.user.id,
+            pending_images=saved_images[1:],
+            image_position=1,
+            total_images=total_images,
         )
-        embed = discord.Embed(title="Which tier?")
-        embed.set_image(url=image.url)
+        embed = discord.Embed(title=self._add_prompt_title(1, total_images))
+        embed.set_image(url=first_url)
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
     @tl.command(name="rearrange", description="Rearrange an item into a different tier")
