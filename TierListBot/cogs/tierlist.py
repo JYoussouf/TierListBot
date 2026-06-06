@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import NamedTuple
 
 import discord
 from discord import app_commands
@@ -12,6 +13,12 @@ from TierListBot.services.image_store import ImageStore, ImageValidationError, S
 from TierListBot.services.tierlist_service import LimitError, NotFoundError, TierListError, TierListService
 
 logger = logging.getLogger(__name__)
+
+
+class QueuedImage(NamedTuple):
+    stored: StoredImage
+    original_filename: str | None
+    preview_url: str
 
 
 # ── Modals ────────────────────────────────────────────────────────────────────
@@ -183,7 +190,7 @@ class TierSelectView(discord.ui.View):
         label: str | None,
         actor_id: int,
         show_label_btn: bool = True,
-        pending_images: list[tuple[StoredImage, str | None, str]] | None = None,
+        pending_images: list[QueuedImage] | None = None,
         image_position: int = 1,
         total_images: int = 1,
     ):
@@ -254,13 +261,13 @@ class TierSelectView(discord.ui.View):
         self.cog.service.update_message_id(self.tier_list.id, str(new_msg.id))
 
         if self.pending_images:
-            next_stored, next_filename, next_url = self.pending_images[0]
+            next_image = self.pending_images[0]
             next_view = TierSelectView(
                 self.cog,
                 self.tier_list,
                 tier_labels,
-                next_stored,
-                next_filename,
+                next_image.stored,
+                next_image.original_filename,
                 None,
                 self.actor_id,
                 pending_images=self.pending_images[1:],
@@ -270,7 +277,7 @@ class TierSelectView(discord.ui.View):
             next_embed = discord.Embed(
                 title=self.cog._add_prompt_title(next_view.image_position, next_view.total_images)
             )
-            next_embed.set_image(url=next_url)
+            next_embed.set_image(url=next_image.preview_url)
             await interaction.response.edit_message(content="​", embed=next_embed, view=next_view)
             return
 
@@ -701,7 +708,7 @@ class TierListCog(commands.Cog):
         ]
         total_images = len(images)
 
-        saved_images: list[tuple[StoredImage, str | None, str]] = []
+        saved_images: list[QueuedImage] = []
         for idx, attached in enumerate(images, start=1):
             try:
                 suffix = Path(attached.filename).suffix.lstrip(".") or "png"
@@ -714,16 +721,18 @@ class TierListCog(commands.Cog):
                     message = f"{message} (image {idx} of {total_images})"
                 await interaction.followup.send(message, ephemeral=True)
                 return
-            saved_images.append((stored, attached.filename, attached.url))
+            saved_images.append(
+                QueuedImage(stored=stored, original_filename=attached.filename, preview_url=attached.url)
+            )
 
         tier_labels = self.service.get_tiers_ordered(tier_list.id)
-        first_stored, first_filename, first_url = saved_images[0]
+        first_image = saved_images[0]
         view = TierSelectView(
             self,
             tier_list,
             tier_labels,
-            first_stored,
-            first_filename,
+            first_image.stored,
+            first_image.original_filename,
             None,
             interaction.user.id,
             pending_images=saved_images[1:],
@@ -731,7 +740,7 @@ class TierListCog(commands.Cog):
             total_images=total_images,
         )
         embed = discord.Embed(title=self._add_prompt_title(1, total_images))
-        embed.set_image(url=first_url)
+        embed.set_image(url=first_image.preview_url)
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
     @tl.command(name="rearrange", description="Rearrange an item into a different tier")
